@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bitcraft Market Advisor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #1e1e2e;
+      --surface:  #2a2a3e;
+      --surface2: #313244;
+      --accent:   #cba6f7;
+      --accent2:  #89b4fa;
+      --green:    #a6e3a1;
+      --red:      #f38ba8;
+      --fg:       #cdd6f4;
+      --fg-dim:   #6c7086;
+      --border:   #45475a;
+      --row-alt:  #181825;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 18px; color: var(--accent); font-weight: 700; }
+    header span { color: var(--fg-dim); font-size: 12px; }
+
+    main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card h2 { font-size: 13px; color: var(--fg-dim); text-transform: uppercase;
+                letter-spacing: .06em; margin-bottom: 14px; }
+
+    /* ── Player search ── */
+    .search-row { display: flex; gap: 10px; align-items: center; }
+    .search-row input {
+      flex: 1; max-width: 320px;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--fg); border-radius: 6px; padding: 8px 12px;
+      font-size: 14px; outline: none;
+    }
+    .search-row input:focus { border-color: var(--accent); }
+    .search-row input::placeholder { color: var(--fg-dim); }
+
+    .btn {
+      background: var(--accent); color: #1e1e2e;
+      border: none; border-radius: 6px; padding: 8px 18px;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn:hover  { background: #b4befe; }
+    .btn:disabled { background: var(--border); color: var(--fg-dim); cursor: not-allowed; }
+    .btn.secondary {
+      background: var(--surface2); color: var(--fg);
+      border: 1px solid var(--border);
+    }
+    .btn.secondary:hover { background: var(--border); }
+
+    /* ── Tools display ── */
+    #tools-display { display: none; margin-top: 14px; }
+    .tools-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .tool-chip {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 4px 12px; font-size: 12px;
+      color: var(--fg);
+    }
+
+    /* ── Filters ── */
+    .filters-row { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+
+    .filter-group label.group-label {
+      display: block; font-size: 12px; color: var(--fg-dim);
+      margin-bottom: 8px; text-transform: uppercase; letter-spacing: .05em;
+    }
+    .filter-group input[type="number"] {
+      width: 90px; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--fg); border-radius: 6px; padding: 6px 10px;
+      font-size: 13px; outline: none;
+    }
+    .filter-group input[type="number"]:focus { border-color: var(--accent); }
+
+    /* Checkbox toggle */
+    .toggle-label {
+      display: flex; align-items: center; gap: 8px; cursor: pointer;
+      font-size: 13px; color: var(--fg);
+    }
+    .toggle-label input[type="checkbox"] { display: none; }
+    .toggle-label .toggle-track {
+      width: 36px; height: 20px; border-radius: 10px;
+      background: var(--border); position: relative; transition: background .2s;
+    }
+    .toggle-label input:checked + .toggle-track { background: var(--accent); }
+    .toggle-label .toggle-track::after {
+      content: ''; position: absolute; top: 3px; left: 3px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: white; transition: left .2s;
+    }
+    .toggle-label input:checked + .toggle-track::after { left: 19px; }
+
+    /* Regions */
+    #regions-grid {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+    }
+    .region-chip {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 5px 10px;
+      cursor: pointer; transition: border-color .15s;
+      font-size: 12px;
+    }
+    .region-chip:hover  { border-color: var(--accent2); }
+    .region-chip.active { border-color: var(--accent); background: #3d2e5a; }
+    .region-chip input  { display: none; }
+    .region-chip .dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--border);
+    }
+    .region-chip.active .dot { background: var(--accent); }
+    .region-players { color: var(--fg-dim); }
+
+    /* ── Results header row ── */
+    .results-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px; flex-wrap: wrap; gap: 10px;
+    }
+    .results-header h2 { font-size: 15px; color: var(--fg); font-weight: 600; }
+    .stats-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 3px 10px; font-size: 11px; color: var(--fg-dim);
+    }
+    .pill span { color: var(--fg); font-weight: 600; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead tr { background: var(--surface); }
+    th {
+      padding: 10px 14px; text-align: left;
+      font-size: 11px; color: var(--fg-dim); text-transform: uppercase;
+      letter-spacing: .05em; white-space: nowrap; user-select: none;
+      cursor: pointer;
+    }
+    th:hover { color: var(--accent); }
+    th.sorted { color: var(--accent); }
+    th.num, td.num { text-align: right; }
+
+    tbody tr { border-top: 1px solid var(--border); transition: background .1s; }
+    tbody tr:nth-child(even) { background: var(--row-alt); }
+    tbody tr:hover { background: var(--surface2); }
+    td { padding: 9px 14px; white-space: nowrap; }
+
+    .badge {
+      display: inline-block; border-radius: 4px; padding: 2px 7px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge.gather { background: #1e3a2a; color: var(--green); }
+    .badge.craft  { background: #1a2a3e; color: var(--accent2); }
+
+    .tier-tag { color: var(--fg-dim); font-size: 12px; }
+
+    /* ── States ── */
+    #loading, #error-msg, #empty-msg { display: none; }
+
+    .spinner-wrap {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 14px; padding: 48px 0; color: var(--fg-dim);
+    }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-box {
+      background: #3a1a1a; border: 1px solid var(--red);
+      border-radius: 8px; padding: 14px 18px; color: var(--red);
+    }
+
+    .sort-arrow { font-size: 10px; margin-left: 4px; }
+
+    #results-section { display: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Bitcraft Market Advisor</h1>
+  <span>Buy order opportunities based on your toolbelt</span>
+</header>
+
+<main>
+
+  <!-- Player search -->
+  <div class="card">
+    <h2>Player</h2>
+    <div class="search-row">
+      <input id="username-input" type="text" placeholder="Enter your username…"
+             autocomplete="off" spellcheck="false" />
+      <button class="btn" id="search-btn" onclick="searchPlayer()">Search</button>
+    </div>
+    <div id="tools-display">
+      <div style="font-size:12px;color:var(--fg-dim);margin-bottom:4px;">Toolbelt</div>
+      <div class="tools-grid" id="tools-grid"></div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="card" id="filters-card" style="display:none">
+    <h2>Filters</h2>
+    <div class="filters-row">
+
+      <div class="filter-group">
+        <label class="group-label">Regions</label>
+        <div id="regions-grid"><span style="color:var(--fg-dim);font-size:12px">Loading…</span></div>
+      </div>
+
+      <div class="filter-group">
+        <label class="group-label">Min Buy Price</label>
+        <input type="number" id="min-price" value="1" min="1" />
+      </div>
+
+      <div class="filter-group">
+        <label class="group-label">Options</label>
+        <label class="toggle-label" style="margin-bottom:8px">
+          <input type="checkbox" id="crafting-toggle" checked />
+          <div class="toggle-track"></div>
+          Include craftable items
+        </label>
+      </div>
+
+      <div class="filter-group" style="margin-top:auto">
+        <button class="btn" id="refresh-btn" onclick="fetchResults()">⟳ Refresh</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading">
+    <div class="spinner-wrap">
+      <div class="spinner"></div>
+      <div id="loading-msg">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div id="error-msg" style="margin-bottom:20px">
+    <div class="error-box" id="error-text"></div>
+  </div>
+
+  <!-- Results -->
+  <div id="results-section">
+    <div class="results-header">
+      <h2 id="results-title">Results</h2>
+      <div class="stats-pills" id="stats-pills"></div>
+    </div>
+    <div class="table-wrap">
+      <table id="results-table">
+        <thead>
+          <tr>
+            <th onclick="sortBy('name')">Item <span class="sort-arrow" id="arrow-name"></span></th>
+            <th onclick="sortBy('tier')">Tier / Tag <span class="sort-arrow" id="arrow-tier"></span></th>
+            <th onclick="sortBy('source')">Source <span class="sort-arrow" id="arrow-source"></span></th>
+            <th class="num" onclick="sortBy('highest_buy')">Best Buy <span class="sort-arrow" id="arrow-highest_buy"></span></th>
+            <th class="num" onclick="sortBy('total_qty')">Qty Wanted <span class="sort-arrow" id="arrow-total_qty"></span></th>
+            <th class="num sorted" onclick="sortBy('score')">Score <span class="sort-arrow" id="arrow-score">▼</span></th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+    <div id="empty-msg" style="padding:32px;text-align:center;color:var(--fg-dim)">
+      No results found for the current filters.
+    </div>
+  </div>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
