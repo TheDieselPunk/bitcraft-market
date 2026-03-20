@@ -114,15 +114,18 @@ def can_craft(recipes, obtainable):
 def find_craftable_reverse(all_recipes, obtainable):
     """
     Find market items craftable via 'recipesUsingItem' on obtainable items.
-    Iterates until stable so crafting chains are resolved.
+    Also follows itemListPossibilities on intermediate 'Products' items.
+    Iterates until stable so multi-step chains are resolved.
+    Returns (craftable, loot) sets of item IDs.
     """
-    market_item_ids = set(all_recipes.keys())
+    market_item_ids = {iid for iid, r in all_recipes.items() if not r.get('intermediate')}
     craftable = set()
+    loot      = set()
 
     changed = True
     while changed:
         changed = False
-        current = obtainable | craftable
+        current = obtainable | craftable | loot
         for item_id, recipes in all_recipes.items():
             if item_id not in current:
                 continue
@@ -140,23 +143,53 @@ def find_craftable_reverse(all_recipes, obtainable):
                 for output in recipe.get('craftedItemStacks', []):
                     out_id = str(output['item_id'])
                     if out_id in market_item_ids and out_id not in current:
+                        # Direct market item output (e.g. processed ore → ingot)
                         craftable.add(out_id)
                         changed = True
-    return craftable
+                    elif out_id in all_recipes and all_recipes[out_id].get('intermediate'):
+                        # Intermediate "Products" box — follow its loot table
+                        for loot_entry in all_recipes[out_id].get('itemListPossibilities', []):
+                            loot_id = str(loot_entry.get('targetId', ''))
+                            if loot_id in market_item_ids and loot_id not in current:
+                                loot.add(loot_id)
+                                changed = True
+    return craftable, loot
 
 
 def classify_items(all_recipes, tools, include_crafting=True):
     """
-    Given a recipe dict and tools, return (extractable, craftable) sets of item IDs.
+    Given a recipe dict and tools, return (extractable, craftable, source_map).
+    source_map: item_id -> 'gather' | 'craft' | 'loot'
+    Intermediate items (Products boxes etc.) are excluded from all output sets.
     """
-    extractable = {iid for iid, r in all_recipes.items() if can_extract(r, tools)}
+    extractable = {
+        iid for iid, r in all_recipes.items()
+        if not r.get('intermediate') and can_extract(r, tools)
+    }
     craftable = set()
+    loot      = set()
+
     if include_crafting:
         for iid, r in all_recipes.items():
-            if iid not in extractable and can_craft(r, extractable):
+            if r.get('intermediate') or iid in extractable:
+                continue
+            if can_craft(r, extractable):
                 craftable.add(iid)
-        craftable |= find_craftable_reverse(all_recipes, extractable)
-    return extractable, craftable
+        rev_craftable, rev_loot = find_craftable_reverse(all_recipes, extractable)
+        craftable |= rev_craftable
+        loot      |= rev_loot
+
+    source_map = {}
+    for iid in extractable:
+        source_map[iid] = 'gather'
+    for iid in craftable:
+        if iid not in source_map:
+            source_map[iid] = 'craft'
+    for iid in loot:
+        if iid not in source_map:
+            source_map[iid] = 'loot'
+
+    return extractable, craftable | loot, source_map
 
 
 def cors_headers():

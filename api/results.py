@@ -83,14 +83,14 @@ class handler(BaseHTTPRequestHandler):
             market_items = market_data.get('data', {}).get('items', [])
             market_ids   = {str(item['id']) for item in market_items}
 
-            # 2. Load recipe cache and restrict to market items
+            # 2. Load recipe cache — keep market items AND intermediates (needed for loot chains)
             all_recipes = {
                 iid: r for iid, r in load_recipes_cache().items()
-                if iid in market_ids
+                if iid in market_ids or r.get('intermediate')
             }
 
             # 3. Classify obtainable items
-            extractable, craftable = classify_items(all_recipes, tools, include_crafting=crafting)
+            extractable, craftable, source_map = classify_items(all_recipes, tools, include_crafting=crafting)
             obtainable = extractable | craftable
 
             # 4. Fetch buy orders in parallel
@@ -111,7 +111,7 @@ class handler(BaseHTTPRequestHandler):
                 if order['highest_buy'] < min_price:
                     continue
                 recipes = all_recipes.get(iid, {})
-                source  = 'gather' if iid in extractable else 'craft'
+                source  = source_map.get(iid, 'craft')
                 score   = order['highest_buy'] * order['total_qty']
                 items.append({
                     'id':          iid,
