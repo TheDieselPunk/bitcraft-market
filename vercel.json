@@ -1,7 +1,7 @@
 {
   "functions": {
-    "api/*.py": {
-      "maxDuration": 30
-    }
+    "api/search.py":  { "maxDuration": 30 },
+    "api/results.py": { "maxDuration": 30 },
+    "api/regions.py": { "maxDuration": 30 }
   }
 }
