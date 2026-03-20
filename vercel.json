@@ -1,7 +1,15 @@
 {
-  "functions": {
-    "api/search.py":  { "maxDuration": 30 },
-    "api/results.py": { "maxDuration": 30 },
-    "api/regions.py": { "maxDuration": 30 }
-  }
+  "builds": [
+    { "src": "api/search.py",  "use": "@vercel/python" },
+    { "src": "api/results.py", "use": "@vercel/python" },
+    { "src": "api/regions.py", "use": "@vercel/python" },
+    { "src": "index.html",     "use": "@vercel/static" },
+    { "src": "app.js",         "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/search",  "dest": "/api/search.py"  },
+    { "src": "/api/results", "dest": "/api/results.py" },
+    { "src": "/api/regions", "dest": "/api/regions.py" },
+    { "src": "/(.*)",        "dest": "/$1"             }
+  ]
 }
