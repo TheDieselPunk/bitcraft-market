@@ -16,12 +16,12 @@ jobs:
           python-version: '3.12'
 
       - name: Build recipe cache
-        run: python web/scripts/build_recipes.py
+        run: python scripts/build_recipes.py
 
       - name: Commit updated recipes.json
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add web/data/recipes.json
+          git add data/recipes.json
           git diff --cached --quiet || git commit -m "chore: refresh recipe cache [skip ci]"
           git push
