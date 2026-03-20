@@ -103,12 +103,14 @@ async function fetchResults() {
 
   const minPrice  = document.getElementById('min-price').value || 1;
   const crafting  = document.getElementById('crafting-toggle').checked;
+  const debug     = document.getElementById('debug-toggle').checked;
   const regions   = getSelectedRegions();
 
   const params = new URLSearchParams({
     player_id: playerId,
     min_price: minPrice,
     crafting:  crafting,
+    debug:     debug,
   });
   if (regions) params.set('regions', regions);
 
@@ -161,6 +163,7 @@ function renderStats(stats, regions) {
     <div class="pill">Gatherable <span>${stats.extractable ?? '?'}</span></div>
     <div class="pill">Craftable <span>${stats.craftable ?? '?'}</span></div>
     <div class="pill">With orders <span>${stats.with_orders ?? '?'}</span></div>
+    ${stats.unobtainable ? `<div class="pill">Unobtainable <span>${stats.unobtainable}</span></div>` : ''}
   `;
 }
 
@@ -185,15 +188,19 @@ function renderTable() {
   document.getElementById('empty-msg').style.display = 'none';
 
   for (const r of sorted) {
-    const tierTag = r.tier >= 0 ? `T${r.tier}` : (r.tag || '—');
+    const tierTag    = r.tier >= 0 ? `T${r.tier}` : (r.tag || '—');
+    const buyStr     = r.highest_buy != null ? r.highest_buy.toLocaleString() : '—';
+    const qtyStr     = r.total_qty   != null ? r.total_qty.toLocaleString()   : '—';
+    const scoreStr   = r.score       > 0     ? r.score.toLocaleString()       : '—';
     const tr = document.createElement('tr');
+    if (r.source === 'none') tr.classList.add('unobtainable');
     tr.innerHTML = `
       <td>${escHtml(r.name)}</td>
       <td class="tier-tag">${escHtml(tierTag)}</td>
       <td><span class="badge ${r.source}">${r.source}</span></td>
-      <td class="num">${r.highest_buy.toLocaleString()}</td>
-      <td class="num">${r.total_qty.toLocaleString()}</td>
-      <td class="num">${r.score.toLocaleString()}</td>
+      <td class="num">${buyStr}</td>
+      <td class="num">${qtyStr}</td>
+      <td class="num">${scoreStr}</td>
     `;
     tbody.appendChild(tr);
   }
@@ -240,6 +247,10 @@ function escHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function toggleDebug() {
+  if (playerId) fetchResults();
 }
 
 // Allow pressing Enter in the username field

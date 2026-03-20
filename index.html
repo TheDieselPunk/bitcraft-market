@@ -178,6 +178,8 @@
     }
     .badge.gather { background: #1e3a2a; color: var(--green); }
     .badge.craft  { background: #1a2a3e; color: var(--accent2); }
+    .badge.none   { background: #2a1a1a; color: var(--fg-dim); }
+    tr.unobtainable { opacity: 0.45; font-style: italic; }
 
     .tier-tag { color: var(--fg-dim); font-size: 12px; }
 
@@ -249,6 +251,11 @@
           <input type="checkbox" id="crafting-toggle" checked />
           <div class="toggle-track"></div>
           Include craftable items
+        </label>
+        <label class="toggle-label" style="margin-bottom:8px">
+          <input type="checkbox" id="debug-toggle" onchange="toggleDebug()" />
+          <div class="toggle-track"></div>
+          Show unobtainable items
         </label>
       </div>
 

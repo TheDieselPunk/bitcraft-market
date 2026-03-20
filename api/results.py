@@ -51,6 +51,7 @@ class handler(BaseHTTPRequestHandler):
         regions_raw = params.get('regions',     [''])[0].strip()
         min_price   = int(params.get('min_price', ['1'])[0] or 1)
         crafting    = params.get('crafting', ['true'])[0].lower() != 'false'
+        debug       = params.get('debug',    ['false'])[0].lower() == 'true'
 
         if not player_id:
             self._send(400, {'error': 'player_id is required'})
@@ -125,15 +126,34 @@ class handler(BaseHTTPRequestHandler):
 
             items.sort(key=lambda x: x['score'], reverse=True)
 
+            # Debug mode: append unobtainable items (no order fetch — use bulk count only)
+            if debug:
+                market_by_id = {str(m['id']): m for m in market_items}
+                for iid, recipes in all_recipes.items():
+                    if iid in obtainable:
+                        continue
+                    m = market_by_id.get(iid, {})
+                    items.append({
+                        'id':          iid,
+                        'name':        recipes.get('name', iid),
+                        'tier':        recipes.get('tier', -1),
+                        'tag':         recipes.get('tag', ''),
+                        'source':      'none',
+                        'highest_buy': None,
+                        'total_qty':   m.get('buyOrders', None),
+                        'score':       0,
+                    })
+
             self._send(200, {
                 'items':       items,
                 'stats': {
-                    'total_market':  len(market_items),
+                    'total_market':   len(market_items),
                     'cached_recipes': len(all_recipes),
-                    'extractable':   len(extractable),
-                    'craftable':     len(craftable),
-                    'with_orders':   len(items),
-                    'regions':       sorted(region_ids) if region_ids else 'all',
+                    'extractable':    len(extractable),
+                    'craftable':      len(craftable),
+                    'with_orders':    len(items),
+                    'unobtainable':   sum(1 for i in items if i['source'] == 'none'),
+                    'regions':        sorted(region_ids) if region_ids else 'all',
                 },
             })
 
