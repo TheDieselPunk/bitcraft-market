@@ -261,3 +261,38 @@ function toggleDebug() {
 // Allow pressing Enter in the username field
 document.getElementById('username-input')
   .addEventListener('keydown', e => { if (e.key === 'Enter') searchPlayer(); });
+
+// ── Version badge ───────────────────────────────────────────────────────────
+
+function timeAgo(isoStr) {
+  if (!isoStr) return null;
+  const diff = Math.floor((Date.now() - new Date(isoStr)) / 1000);
+  if (diff < 60)   return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+async function loadVersion() {
+  try {
+    const res  = await fetch(`${API}/api/version`);
+    const data = await res.json();
+    const badge = document.getElementById('version-badge');
+
+    const shaLine = `<span title="${data.sha_full || data.sha}">
+      deploy <span style="color:var(--accent2);font-family:monospace">${data.sha}</span>
+      ${data.branch !== 'main' ? `<span style="color:var(--fg-dim)">(${data.branch})</span>` : ''}
+    </span>`;
+
+    const recipeAge = timeAgo(data.recipes_built_at);
+    const recipeLine = recipeAge
+      ? `<span title="${data.recipes_built_at}">recipes updated <span style="color:var(--green)">${recipeAge}</span></span>`
+      : '';
+
+    badge.innerHTML = shaLine + (recipeLine ? recipeLine : '');
+  } catch (_) {
+    // version badge is non-critical — silently ignore
+  }
+}
+
+loadVersion();

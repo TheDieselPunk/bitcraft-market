@@ -226,19 +226,27 @@ def main():
                               fetch_ingredient_item, 'ingredient')
         updated.update(results)
 
-    OUT_FILE.write_text(json.dumps(updated))
-
-    # ── Summary ─────────────────────────────────────────────────────────────
+    # ── Summary + metadata ───────────────────────────────────────────────────
     n_market = sum(1 for v in updated.values()
                    if not v.get('intermediate') and not v.get('ingredient'))
     n_inter  = sum(1 for v in updated.values() if v.get('intermediate'))
     n_ing    = sum(1 for v in updated.values() if v.get('ingredient'))
 
+    updated['__meta__'] = {
+        'built_at':     time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        'market':       n_market,
+        'intermediates': n_inter,
+        'ingredients':  n_ing,
+    }
+
+    OUT_FILE.write_text(json.dumps(updated))
+
     print(f'\n{"─"*50}')
-    print(f'Total entries : {len(updated)}')
+    print(f'Total entries : {len(updated) - 1}')   # exclude __meta__
     print(f'  Market items : {n_market}')
     print(f'  Intermediates: {n_inter}')
     print(f'  Ingredients  : {n_ing}')
+    print(f'  Built at     : {updated["__meta__"]["built_at"]}')
     print(f'Written to {OUT_FILE}')
 
 
