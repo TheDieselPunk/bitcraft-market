@@ -187,13 +187,18 @@ function renderTable() {
   }
   document.getElementById('empty-msg').style.display = 'none';
 
+  const HEX = '⬡';
+
   for (const r of sorted) {
     const tierTag    = r.tier >= 0 ? `T${r.tier}` : (r.tag || '—');
-    const buyStr     = r.highest_buy != null ? r.highest_buy.toLocaleString() : '—';
+    const buyStr     = r.highest_buy != null ? `${HEX} ${r.highest_buy.toLocaleString()}` : '—';
     const qtyStr     = r.total_qty   != null ? r.total_qty.toLocaleString()   : '—';
-    const scoreStr   = r.score       > 0     ? r.score.toLocaleString()       : '—';
+    const scoreStr   = r.score       > 0     ? `${HEX} ${r.score.toLocaleString()}` : '—';
     const tr = document.createElement('tr');
     if (r.source === 'none') tr.classList.add('unobtainable');
+    tr.style.cursor = 'pointer';
+    tr.title = 'View on bitjita.com';
+    tr.addEventListener('click', () => window.open(`https://bitjita.com/market/item/${r.id}`, '_blank'));
     tr.innerHTML = `
       <td>${escHtml(r.name)}</td>
       <td class="tier-tag">${escHtml(tierTag)}</td>
