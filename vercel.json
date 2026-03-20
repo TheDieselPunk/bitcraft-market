@@ -3,6 +3,7 @@
     { "src": "api/search.py",  "use": "@vercel/python" },
     { "src": "api/results.py", "use": "@vercel/python" },
     { "src": "api/regions.py", "use": "@vercel/python" },
+    { "src": "api/version.py", "use": "@vercel/python" },
     { "src": "index.html",     "use": "@vercel/static" },
     { "src": "app.js",         "use": "@vercel/static" }
   ],
@@ -10,6 +11,7 @@
     { "src": "/api/search",  "dest": "/api/search.py"  },
     { "src": "/api/results", "dest": "/api/results.py" },
     { "src": "/api/regions", "dest": "/api/regions.py" },
+    { "src": "/api/version", "dest": "/api/version.py" },
     { "src": "/(.*)",        "dest": "/$1"             }
   ]
 }
