@@ -83,10 +83,11 @@ class handler(BaseHTTPRequestHandler):
             market_items = market_data.get('data', {}).get('items', [])
             market_ids   = {str(item['id']) for item in market_items}
 
-            # 2. Load recipe cache — keep market items AND intermediates (needed for loot chains)
+            # 2. Load recipe cache — keep market items, intermediates (loot chains),
+            #    and ingredients (raw mats needed for crafting ingredient checks)
             all_recipes = {
                 iid: r for iid, r in load_recipes_cache().items()
-                if iid in market_ids or r.get('intermediate')
+                if iid in market_ids or r.get('intermediate') or r.get('ingredient')
             }
 
             # 3. Classify obtainable items

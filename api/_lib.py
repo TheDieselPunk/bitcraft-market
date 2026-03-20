@@ -160,22 +160,39 @@ def classify_items(all_recipes, tools, include_crafting=True):
     """
     Given a recipe dict and tools, return (extractable, craftable, source_map).
     source_map: item_id -> 'gather' | 'craft' | 'loot'
-    Intermediate items (Products boxes etc.) are excluded from all output sets.
+
+    Three item roles exist in the cache:
+      - market items  (normal entries)  → appear in results
+      - intermediate  (Products boxes)  → used for loot chain only
+      - ingredient    (raw mats w/ no buy orders, e.g. Ore Chunks) →
+                      used to satisfy crafting ingredient checks only;
+                      never appear in the final result set
     """
+    # Ingredient items that the player can extract — used only for ingredient checks
+    ingredient_extractable = {
+        iid for iid, r in all_recipes.items()
+        if r.get('ingredient') and can_extract(r, tools)
+    }
+
+    # Market items the player can extract directly
     extractable = {
         iid for iid, r in all_recipes.items()
-        if not r.get('intermediate') and can_extract(r, tools)
+        if not r.get('intermediate') and not r.get('ingredient') and can_extract(r, tools)
     }
+
+    # Combined set used when checking "can I obtain this ingredient?"
+    all_obtainable = extractable | ingredient_extractable
+
     craftable = set()
     loot      = set()
 
     if include_crafting:
         for iid, r in all_recipes.items():
-            if r.get('intermediate') or iid in extractable:
+            if r.get('intermediate') or r.get('ingredient') or iid in extractable:
                 continue
-            if can_craft(r, extractable):
+            if can_craft(r, all_obtainable):
                 craftable.add(iid)
-        rev_craftable, rev_loot = find_craftable_reverse(all_recipes, extractable)
+        rev_craftable, rev_loot = find_craftable_reverse(all_recipes, all_obtainable)
         craftable |= rev_craftable
         loot      |= rev_loot
 

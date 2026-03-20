@@ -63,8 +63,9 @@ def main():
     for i, item in enumerate(items):
         item_id = str(item['id'])
 
-        # Skip if already cached (recipes don't change frequently)
-        if item_id in existing and 'using' in existing[item_id]:
+        # Skip if already cached with all required fields
+        required = {'extraction', 'crafting', 'using', 'itemListPossibilities'}
+        if item_id in existing and required.issubset(existing[item_id]):
             continue
 
         try:
@@ -115,8 +116,39 @@ def main():
         except Exception as e:
             print(f'  Error fetching intermediate {int_id}: {e}')
 
+    # Third pass: fetch ingredient items used in crafting recipes for market items.
+    # These are items like "Emarium Ore Chunk" — extractable by the player but
+    # not sold on the market — whose absence breaks the can_craft() check.
+    ingredient_ids = set()
+    for item_data in updated.values():
+        if item_data.get('intermediate') or item_data.get('ingredient'):
+            continue
+        for recipe in item_data.get('crafting', []):
+            if 'unpack' in recipe.get('name', '').lower():
+                continue
+            for ing in recipe.get('consumedItemStacks', []):
+                if ing.get('item_type') == 'item':
+                    ing_id = str(ing['item_id'])
+                    if ing_id not in updated:
+                        ingredient_ids.add(ing_id)
+
+    print(f'\nFetching {len(ingredient_ids)} ingredient items (raw mats not on market)…')
+    for ing_id in ingredient_ids:
+        try:
+            d = api_get(f'/api/items/{ing_id}')
+            updated[ing_id] = {
+                'name':       d['item']['name'],
+                'tier':       d['item']['tier'],
+                'tag':        d['item'].get('tag', ''),
+                'ingredient': True,
+                'extraction': d.get('extractionRecipes', []),
+            }
+        except Exception as e:
+            print(f'  Error fetching ingredient {ing_id}: {e}')
+
     OUT_FILE.write_text(json.dumps(updated))
-    print(f'\nDone. {fetched} fetched, {errors} errors. Total cached: {len(updated)} ({len(intermediate_ids)} intermediates).')
+    print(f'\nDone. {fetched} fetched, {errors} errors. Total cached: {len(updated)} '
+          f'({len(intermediate_ids)} intermediates, {len(ingredient_ids)} ingredients).')
     print(f'Written to {OUT_FILE}')
 
 
