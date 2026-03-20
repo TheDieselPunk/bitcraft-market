@@ -18,7 +18,7 @@ from pathlib import Path
 API_BASE = 'https://bitjita.com'
 HEADERS  = {'User-Agent': 'BitJita (Billard)', 'Accept': 'application/json'}
 OUT_FILE = Path(__file__).parent.parent / 'data' / 'recipes.json'
-RATE_LIMIT = 180  # req/min — conservative to avoid hitting the 250 cap
+RATE_LIMIT = 230  # req/min — comfortably under the 250 cap
 _last = 0.0
 
 
@@ -50,11 +50,11 @@ def main():
         except Exception:
             pass
 
-    # Fetch all items with any market orders
+    # Fetch only items with active buy orders (455 vs 1388 total)
     print('Fetching market item list…')
-    data  = api_get('/api/market', {'hasOrders': 'true', 'limit': 1000})
+    data  = api_get('/api/market', {'hasBuyOrders': 'true', 'limit': 1000})
     items = data.get('data', {}).get('items', [])
-    print(f'  {len(items)} items found.')
+    print(f'  {len(items)} items with buy orders found.')
 
     updated = dict(existing)
     fetched = 0
@@ -82,8 +82,10 @@ def main():
             print(f'  Error fetching {item_id}: {e}')
             errors += 1
 
-        if (i + 1) % 50 == 0:
-            print(f'  {i + 1}/{len(items)} processed ({fetched} fetched, {errors} errors)…')
+        # Save incrementally every 25 items so cancellations don't lose progress
+        if (i + 1) % 25 == 0:
+            OUT_FILE.write_text(json.dumps(updated))
+            print(f'  {i + 1}/{len(items)} processed ({fetched} fetched, {errors} errors)… [saved]')
 
     OUT_FILE.write_text(json.dumps(updated))
     print(f'\nDone. {fetched} fetched, {errors} errors. Total cached: {len(updated)}.')
