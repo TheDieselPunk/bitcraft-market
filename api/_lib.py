@@ -99,15 +99,29 @@ def is_unpack_recipe(recipe):
     return 'unpack' in recipe.get('name', '').lower()
 
 
-def can_craft(recipes, obtainable):
+def can_craft(recipes, tools, obtainable):
     for recipe in recipes.get('crafting', []):
         if is_unpack_recipe(recipe):
             continue
         item_ings = [i for i in recipe.get('consumedItemStacks', []) if i.get('item_type') == 'item']
-        if not item_ings:
-            continue
-        if all(str(i['item_id']) in obtainable for i in item_ings):
-            return True
+
+        if item_ings:
+            # Normal recipe — all item ingredients must be obtainable
+            if not all(str(i['item_id']) in obtainable for i in item_ings):
+                continue
+        else:
+            # Cargo-only recipe (e.g. "Extract Emarium Ore Piece" from ore chunk cargo).
+            # The cargo is obtained through world mining — check the recipe's own
+            # tool requirements to determine if the player can do it.
+            tool_reqs = recipe.get('toolRequirements', [])
+            if tool_reqs and not all(
+                tools.get(r['tool_type'], {}).get('level', 0) >= r['level'] and
+                tools.get(r['tool_type'], {}).get('power', 0) >= r['power']
+                for r in tool_reqs
+            ):
+                continue
+
+        return True
     return False
 
 
@@ -190,7 +204,7 @@ def classify_items(all_recipes, tools, include_crafting=True):
         for iid, r in all_recipes.items():
             if r.get('intermediate') or r.get('ingredient') or iid in extractable:
                 continue
-            if can_craft(r, all_obtainable):
+            if can_craft(r, tools, all_obtainable):
                 craftable.add(iid)
         rev_craftable, rev_loot = find_craftable_reverse(all_recipes, all_obtainable)
         craftable |= rev_craftable
