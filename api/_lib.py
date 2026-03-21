@@ -99,6 +99,38 @@ def is_unpack_recipe(recipe):
     return 'unpack' in recipe.get('name', '').lower()
 
 
+def can_self_extract(recipes, item_id, tools):
+    """
+    Some items (e.g. higher-tier fish) have no extraction recipe in the API,
+    but DO have a 'using' recipe where the item is its own ingredient and the
+    recipe carries a tool requirement (e.g. 'Craft Muddy Auratus Products'
+    requires a L2 rod and consumes 1x Muddy Auratus).
+
+    This pattern means: if the player has the right tool they can catch AND
+    process the item in one workflow, making it effectively gatherable.
+    """
+    if recipes.get('extraction'):           # already handled by can_extract
+        return False
+    for recipe in recipes.get('using', []):
+        if is_unpack_recipe(recipe):
+            continue
+        item_ings = [i for i in recipe.get('consumedItemStacks', [])
+                     if i.get('item_type') == 'item']
+        # The item must appear as its own ingredient
+        if not any(str(i['item_id']) == item_id for i in item_ings):
+            continue
+        tool_reqs = recipe.get('toolRequirements', [])
+        if not tool_reqs:
+            continue
+        if all(
+            tools.get(req['tool_type'], {}).get('level', 0) >= req['level'] and
+            tools.get(req['tool_type'], {}).get('power', 0) >= req['power']
+            for req in tool_reqs
+        ):
+            return True
+    return False
+
+
 def can_craft(recipes, tools, obtainable):
     for recipe in recipes.get('crafting', []):
         if is_unpack_recipe(recipe):
@@ -188,10 +220,12 @@ def classify_items(all_recipes, tools, include_crafting=True):
         if r.get('ingredient') and can_extract(r, tools)
     }
 
-    # Market items the player can extract directly
+    # Market items the player can extract directly, or catch via self-referential
+    # using recipes (e.g. higher-tier fish with no API extraction recipe)
     extractable = {
         iid for iid, r in all_recipes.items()
-        if not r.get('intermediate') and not r.get('ingredient') and can_extract(r, tools)
+        if not r.get('intermediate') and not r.get('ingredient')
+        and (can_extract(r, tools) or can_self_extract(r, iid, tools))
     }
 
     # Combined set used when checking "can I obtain this ingredient?"
