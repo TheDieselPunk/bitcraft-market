@@ -178,8 +178,28 @@
     }
     .badge.gather { background: #1e3a2a; color: var(--green); }
     .badge.craft  { background: #1a2a3e; color: var(--accent2); }
+    .badge.loot   { background: #2a1e3a; color: var(--accent); }
     .badge.none   { background: #2a1a1a; color: var(--fg-dim); }
     tr.unobtainable { opacity: 0.45; font-style: italic; }
+
+    /* ── Tag filter chips ── */
+    .tag-filter-section {
+      margin-bottom: 12px;
+      display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap;
+    }
+    .tag-filter-label {
+      font-size: 11px; color: var(--fg-dim); text-transform: uppercase;
+      letter-spacing: .05em; padding-top: 5px; white-space: nowrap;
+    }
+    .tag-chips-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag-chip {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--fg-dim); border-radius: 20px; padding: 3px 10px;
+      font-size: 11px; cursor: pointer; transition: all .15s;
+      white-space: nowrap;
+    }
+    .tag-chip:hover  { border-color: var(--accent2); color: var(--fg); }
+    .tag-chip.active { border-color: var(--accent); background: #3d2e5a; color: var(--accent); }
 
     .tier-tag { color: var(--fg-dim); font-size: 12px; }
 
@@ -285,6 +305,10 @@
     <div class="results-header">
       <h2 id="results-title">Results</h2>
       <div class="stats-pills" id="stats-pills"></div>
+    </div>
+    <div id="tag-filter-section" class="tag-filter-section" style="display:none">
+      <span class="tag-filter-label">Tags</span>
+      <div class="tag-chips-wrap" id="tag-chips"></div>
     </div>
     <div class="table-wrap">
       <table id="results-table">

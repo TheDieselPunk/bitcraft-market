@@ -3,11 +3,18 @@ GET /api/results?player_id=<id>&regions=12,13&min_price=1&crafting=true
 
 Fetches buy orders for all items the player can gather/craft.
 Uses pre-built recipes.json for filtering; fetches live market + order data.
+
+Market fetch strategy:
+  - No region filter: uses stats baked into the market list (0 extra requests).
+  - Region filter: fetches per-item orders concurrently with a token bucket
+    rate limiter (230 req/min) and up to 20 parallel workers.
 """
 
 import json
 import sys
 import os
+import threading
+import time
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -18,13 +25,51 @@ from _lib import (
     classify_items, cors_headers,
 )
 
-MAX_WORKERS = 5  # parallel order fetches — stay within bitjita rate limits
+MAX_WORKERS = 20   # parallel order fetches for the region-filtered path
+RATE_LIMIT  = 230  # req/min — leaves headroom for the two initial requests
+
+
+# ── Token bucket (module-level so it persists across warm lambda instances) ─
+
+class _TokenBucket:
+    def __init__(self, rate_per_min: int, burst: int = 20):
+        self.rate     = rate_per_min / 60.0
+        self.capacity = float(burst)
+        self.tokens   = float(burst)
+        self.last     = time.monotonic()
+        self._lock    = threading.Lock()
+
+    def acquire(self):
+        with self._lock:
+            now = time.monotonic()
+            self.tokens = min(self.capacity,
+                              self.tokens + (now - self.last) * self.rate)
+            self.last = now
+            if self.tokens < 1:
+                time.sleep((1.0 - self.tokens) / self.rate)
+                self.tokens = 0.0
+            else:
+                self.tokens -= 1.0
+
+
+_bucket = _TokenBucket(RATE_LIMIT)
+
+
+# ── Helpers ─────────────────────────────────────────────────────────────────
+
+def _stats_from_market_item(m: dict):
+    """Extract highest buy price and total buy qty from a market list item."""
+    stats       = m.get('marketStats') or {}
+    highest_buy = stats.get('highestBuyPrice') or m.get('highestBuyPrice') or 0
+    total_qty   = stats.get('totalBuyQuantity') or m.get('totalBuyQuantity') or 0
+    return int(highest_buy), int(total_qty)
 
 
 def fetch_orders(item_id, region_ids):
-    """Fetch buy orders for one item, filtered to requested regions."""
+    """Fetch per-item buy orders (rate-limited). Used only for region filtering."""
     try:
-        data = api_get(f'/api/market/item/{item_id}')
+        _bucket.acquire()
+        data   = api_get(f'/api/market/item/{item_id}')
         orders = data.get('buyOrders', [])
         if region_ids:
             orders = [o for o in orders if o.get('regionId') in region_ids]
@@ -39,6 +84,8 @@ def fetch_orders(item_id, region_ids):
     except Exception:
         return item_id, None
 
+
+# ── Handler ──────────────────────────────────────────────────────────────────
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -57,7 +104,6 @@ class handler(BaseHTTPRequestHandler):
             self._send(400, {'error': 'player_id is required'})
             return
 
-        # Parse region IDs (comma-separated ints; empty = all regions)
         region_ids = set()
         if regions_raw:
             try:
@@ -67,44 +113,70 @@ class handler(BaseHTTPRequestHandler):
                 return
 
         try:
-            # 1. Fetch toolbelt and market items in parallel
+            # 1. Fetch toolbelt + market list in parallel (2 requests total)
             with ThreadPoolExecutor(max_workers=2) as ex:
-                tools_future  = ex.submit(get_toolbelt, player_id)
-                market_future = ex.submit(
+                tools_f  = ex.submit(get_toolbelt, player_id)
+                market_f = ex.submit(
                     api_get, '/api/market', {'hasBuyOrders': 'true', 'limit': 1000}
                 )
-                tools        = tools_future.result()
-                market_data  = market_future.result()
+                tools       = tools_f.result()
+                market_data = market_f.result()
 
             if not tools:
                 self._send(200, {'error': 'No tools found in player toolbelt', 'items': []})
                 return
 
             market_items = market_data.get('data', {}).get('items', [])
-            market_ids   = {str(item['id']) for item in market_items}
+            market_by_id = {str(item['id']): item for item in market_items}
+            market_ids   = set(market_by_id.keys())
 
-            # 2. Load recipe cache — keep market items, intermediates (loot chains),
-            #    and ingredients (raw mats needed for crafting ingredient checks)
+            # 2. Load recipe cache (market items + intermediates + ingredients)
             all_recipes = {
                 iid: r for iid, r in load_recipes_cache().items()
                 if iid in market_ids or r.get('intermediate') or r.get('ingredient')
             }
 
             # 3. Classify obtainable items
-            extractable, craftable, source_map = classify_items(all_recipes, tools, include_crafting=crafting)
+            extractable, craftable, source_map = classify_items(
+                all_recipes, tools, include_crafting=crafting
+            )
             obtainable = extractable | craftable
 
-            # 4. Fetch buy orders in parallel
+            # 4. Collect buy order stats
             order_results = {}
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
-                futures = {
-                    ex.submit(fetch_orders, iid, region_ids): iid
-                    for iid in obtainable
-                }
-                for future in as_completed(futures):
-                    iid, data = future.result()
-                    if data:
-                        order_results[iid] = data
+
+            if not region_ids:
+                # ── Fast path: no region filter ─────────────────────────────
+                # Stats are already embedded in the market list — 0 extra requests.
+                needs_fetch = []
+                for iid in obtainable:
+                    m = market_by_id.get(iid, {})
+                    highest_buy, total_qty = _stats_from_market_item(m)
+                    if highest_buy:
+                        order_results[iid] = {
+                            'highest_buy': highest_buy,
+                            'total_qty':   total_qty,
+                        }
+                    else:
+                        needs_fetch.append(iid)   # fallback for items missing stats
+
+                if needs_fetch:
+                    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+                        futures = {ex.submit(fetch_orders, iid, set()): iid
+                                   for iid in needs_fetch}
+                        for future in as_completed(futures):
+                            iid, data = future.result()
+                            if data:
+                                order_results[iid] = data
+            else:
+                # ── Region path: fetch per-item orders (rate-limited) ────────
+                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+                    futures = {ex.submit(fetch_orders, iid, region_ids): iid
+                               for iid in obtainable}
+                    for future in as_completed(futures):
+                        iid, data = future.result()
+                        if data:
+                            order_results[iid] = data
 
             # 5. Build result list
             items = []
@@ -112,14 +184,13 @@ class handler(BaseHTTPRequestHandler):
                 if order['highest_buy'] < min_price:
                     continue
                 recipes = all_recipes.get(iid, {})
-                source  = source_map.get(iid, 'craft')
                 score   = order['highest_buy'] * order['total_qty']
                 items.append({
                     'id':          iid,
                     'name':        recipes.get('name', iid),
                     'tier':        recipes.get('tier', -1),
                     'tag':         recipes.get('tag', ''),
-                    'source':      source,
+                    'source':      source_map.get(iid, 'craft'),
                     'highest_buy': order['highest_buy'],
                     'total_qty':   order['total_qty'],
                     'score':       score,
@@ -127,26 +198,28 @@ class handler(BaseHTTPRequestHandler):
 
             items.sort(key=lambda x: x['score'], reverse=True)
 
-            # Debug mode: append unobtainable items (no order fetch — use bulk count only)
+            # Debug: append unobtainable items (no extra fetches)
             if debug:
-                market_by_id = {str(m['id']): m for m in market_items}
                 for iid, recipes in all_recipes.items():
+                    if recipes.get('intermediate') or recipes.get('ingredient'):
+                        continue
                     if iid in obtainable:
                         continue
                     m = market_by_id.get(iid, {})
+                    highest_buy, total_qty = _stats_from_market_item(m)
                     items.append({
                         'id':          iid,
                         'name':        recipes.get('name', iid),
                         'tier':        recipes.get('tier', -1),
                         'tag':         recipes.get('tag', ''),
                         'source':      'none',
-                        'highest_buy': None,
-                        'total_qty':   m.get('buyOrders', None),
+                        'highest_buy': highest_buy or None,
+                        'total_qty':   total_qty or m.get('buyOrders'),
                         'score':       0,
                     })
 
             self._send(200, {
-                'items':       items,
+                'items': items,
                 'stats': {
                     'total_market':   len(market_items),
                     'cached_recipes': len(all_recipes),

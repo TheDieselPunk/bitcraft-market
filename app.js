@@ -2,17 +2,19 @@
 
 const API = ''; // relative URLs — works locally and on Vercel
 
-let playerId = null;
+let playerId   = null;
 let playerTools = {};
-let allItems = [];
-let sortCol = 'score';
-let sortAsc = false;
+let allItems   = [];
+let sortCol    = 'score';
+let sortAsc    = false;
+let activeTags = new Set();   // empty = show all tags
 
 // ── Player search ──────────────────────────────────────────────────────────
 
 async function searchPlayer() {
   const username = document.getElementById('username-input').value.trim();
   if (!username) return;
+  localStorage.setItem('lastUsername', username);
 
   setLoading('Looking up player…');
   hideError();
@@ -130,8 +132,10 @@ async function fetchResults() {
       return;
     }
 
-    allItems = data.items || [];
+    allItems   = data.items || [];
+    activeTags = new Set();   // reset tag filter on each fresh load
     renderStats(data.stats, regions);
+    buildTagFilters();
     renderTable();
 
     document.getElementById('results-section').style.display = 'block';
@@ -167,10 +171,44 @@ function renderStats(stats, regions) {
   `;
 }
 
+// ── Tag filter ──────────────────────────────────────────────────────────────
+
+function buildTagFilters() {
+  const tags = [...new Set(allItems.map(i => i.tag).filter(Boolean))].sort();
+  const wrap  = document.getElementById('tag-chips');
+  const sec   = document.getElementById('tag-filter-section');
+
+  wrap.innerHTML = '';
+  if (!tags.length) { sec.style.display = 'none'; return; }
+
+  for (const tag of tags) {
+    const chip = document.createElement('button');
+    chip.className   = 'tag-chip';
+    chip.textContent = tag;
+    chip.onclick     = () => {
+      if (activeTags.has(tag)) {
+        activeTags.delete(tag);
+        chip.classList.remove('active');
+      } else {
+        activeTags.add(tag);
+        chip.classList.add('active');
+      }
+      renderTable();
+    };
+    wrap.appendChild(chip);
+  }
+  sec.style.display = 'flex';
+}
+
 // ── Table ──────────────────────────────────────────────────────────────────
 
 function renderTable() {
-  const sorted = [...allItems].sort((a, b) => {
+  const visible = activeTags.size
+    ? allItems.filter(r => activeTags.has(r.tag))
+    : allItems;
+
+  const sorted = [...visible];
+  sorted.sort((a, b) => {
     let av = a[sortCol], bv = b[sortCol];
     if (typeof av === 'string') av = av.toLowerCase(), bv = bv.toLowerCase();
     if (av < bv) return sortAsc ? -1 :  1;
@@ -261,6 +299,10 @@ function toggleDebug() {
 // Allow pressing Enter in the username field
 document.getElementById('username-input')
   .addEventListener('keydown', e => { if (e.key === 'Enter') searchPlayer(); });
+
+// Restore last username from localStorage
+const _savedUser = localStorage.getItem('lastUsername');
+if (_savedUser) document.getElementById('username-input').value = _savedUser;
 
 // ── Version badge ───────────────────────────────────────────────────────────
 
