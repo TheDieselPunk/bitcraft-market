@@ -173,8 +173,15 @@ function renderStats(stats, regions) {
 
 // ── Tag filter ──────────────────────────────────────────────────────────────
 
+function normalizeTag(tag) {
+  if (!tag) return tag;
+  // Collapse all tool-type tags into a single "Tools" bucket
+  if (/tool/i.test(tag)) return 'Tools';
+  return tag;
+}
+
 function buildTagFilters() {
-  const tags = [...new Set(allItems.map(i => i.tag).filter(Boolean))].sort();
+  const tags = [...new Set(allItems.map(i => normalizeTag(i.tag)).filter(Boolean))].sort();
   const wrap  = document.getElementById('tag-chips');
   const sec   = document.getElementById('tag-filter-section');
 
@@ -204,7 +211,7 @@ function buildTagFilters() {
 
 function renderTable() {
   const visible = activeTags.size
-    ? allItems.filter(r => activeTags.has(r.tag))
+    ? allItems.filter(r => activeTags.has(normalizeTag(r.tag)))
     : allItems;
 
   const sorted = [...visible];
