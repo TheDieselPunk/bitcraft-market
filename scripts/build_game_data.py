@@ -153,6 +153,97 @@ def build_resource_max_health(resource_desc):
     return result
 
 
+def build_cargo_extraction(extraction_recipes):
+    """
+    Build extraction data for Cargo items from resource nodes.
+
+    Some extraction recipes yield cargo items (e.g. Ferralith Ore Chunk) instead
+    of regular items. They use the same prob_per_hp model.
+
+    Returns {cargo_id_str -> [{resource_id, prob_per_hp, stamina_per_cast, ...}]}
+    """
+    by_cargo = {}
+    for recipe in extraction_recipes:
+        resource_id = str(recipe.get('resource_id', ''))
+        stamina = recipe.get('stamina_requirement', 0.0)
+        time_req = recipe.get('time_requirement', 1.6)
+        tools = [
+            {'tool_type': t.get('tool_type'), 'level': t.get('level', 1), 'power': t.get('power', 1)}
+            for t in recipe.get('tool_requirements', [])
+        ]
+        levels = [
+            {'skill_id': l.get('skill_id'), 'level': l.get('level', 1)}
+            for l in recipe.get('level_requirements', [])
+        ]
+        for stack_entry in recipe.get('extracted_item_stacks', []):
+            stack = stack_entry.get('item_stack', {})
+            if stack.get('item_type', '') != 'Cargo':
+                continue
+            cargo_id = str(stack.get('item_id', ''))
+            prob = stack_entry.get('probability', 0.0)
+            if not cargo_id or prob <= 0:
+                continue
+            entry = {
+                'resource_id': resource_id,
+                'prob_per_hp': prob,
+                'output_quantity': stack.get('quantity', 1),
+                'stamina_per_cast': stamina,
+                'time_per_cast': time_req,
+                'tool_requirements': tools,
+                'level_requirements': levels,
+            }
+            by_cargo.setdefault(cargo_id, []).append(entry)
+    return by_cargo
+
+
+def build_cargo_by_item(crafting_recipes, cargo_extraction, cargo_names):
+    """
+    Build crafting-from-cargo data for items produced by processing gatherable cargo.
+
+    Only includes recipes where the Cargo ingredient exists in cargo_extraction
+    (i.e. it can actually be gathered). This naturally excludes market-package
+    "Unpack" recipes since those cargo IDs have no extraction data.
+
+    Returns {item_id_str -> [{recipe_name, actions_required, stamina_per_action, ...}]}
+    """
+    by_item = {}
+    for recipe in crafting_recipes:
+        cargo_inputs = [
+            i for i in recipe.get('consumed_item_stacks', [])
+            if i.get('item_type') == 'Cargo'
+        ]
+        if not cargo_inputs:
+            continue
+        item_outputs = [
+            o for o in recipe.get('crafted_item_stacks', [])
+            if o.get('item_type') == 'Item'
+        ]
+        if not item_outputs:
+            continue
+        for cargo_input in cargo_inputs:
+            cargo_id = str(cargo_input.get('item_id', ''))
+            if cargo_id not in cargo_extraction:
+                continue  # skip market packages (not gatherable)
+            for output in item_outputs:
+                item_id = str(output.get('item_id', ''))
+                if not item_id:
+                    continue
+                entry = {
+                    'recipe_name':      recipe.get('name', ''),
+                    'stamina_per_action': recipe.get('stamina_requirement', 0.0),
+                    'time_per_action':  recipe.get('time_requirement', 1.6),
+                    'actions_required': recipe.get('actions_required', 1),
+                    'output_quantity':  output.get('quantity', 1),
+                    'tool_requirements': recipe.get('tool_requirements', []),
+                    'level_requirements': recipe.get('level_requirements', []),
+                    'cargo_input_id':   cargo_id,
+                    'cargo_input_qty':  cargo_input.get('quantity', 1),
+                    'cargo_input_name': cargo_names.get(cargo_id, cargo_id),
+                }
+                by_item.setdefault(item_id, []).append(entry)
+    return by_item
+
+
 def bitjita_get(path):
     url = f'{BITJITA_BASE}{path}'
     req = urllib.request.Request(url, headers=BITJITA_HEADERS)
@@ -201,9 +292,25 @@ def main():
         resource_list = resource_desc
     print(f'  {len(resource_list)} resource nodes.')
 
+    print('Fetching crafting_recipe_desc.json …')
+    crafting_recipes = fetch_json('crafting_recipe_desc.json')
+    if isinstance(crafting_recipes, dict):
+        crafting_recipes = list(crafting_recipes.values())
+    print(f'  {len(crafting_recipes)} crafting recipes.')
+
+    print('Fetching cargo_desc.json …')
+    cargo_desc = fetch_json('cargo_desc.json')
+    if isinstance(cargo_desc, dict):
+        cargo_desc = list(cargo_desc.values())
+    cargo_names = {str(c['id']): c['name'] for c in cargo_desc}
+    print(f'  {len(cargo_desc)} cargo types.')
+
     resource_to_actual = build_wrapper_to_actual(resource_list)
     extraction_by_item = build_extraction_by_item(extraction_recipes, resource_to_actual)
     resource_max_health = build_resource_max_health(resource_list)
+    cargo_extraction   = build_cargo_extraction(extraction_recipes)
+    cargo_by_item      = build_cargo_by_item(crafting_recipes, cargo_extraction, cargo_names)
+    print(f'  {len(cargo_extraction)} gatherable cargo types, {len(cargo_by_item)} items via cargo processing.')
 
     # Collect actual fish/node item IDs (from on_destroy_yield mappings)
     actual_item_ids = set()
@@ -255,11 +362,15 @@ def main():
         'extraction_by_item': extraction_by_item,
         'resource_max_health': resource_max_health,
         'extra_recipes': extra_recipes,
+        'cargo_extraction': cargo_extraction,
+        'cargo_by_item': cargo_by_item,
         '__meta__': {
             'built_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'extraction_items': len(extraction_by_item),
             'resources': len(resource_max_health),
             'extra_recipes': len(extra_recipes),
+            'cargo_types': len(cargo_extraction),
+            'cargo_items': len(cargo_by_item),
         },
     }
 
@@ -269,6 +380,8 @@ def main():
     print(f'Extraction item entries : {len(extraction_by_item)}')
     print(f'Resource nodes          : {len(resource_max_health)}')
     print(f'Extra recipes fetched   : {len(extra_recipes)}')
+    print(f'Cargo extraction types  : {len(cargo_extraction)}')
+    print(f'Items via cargo process : {len(cargo_by_item)}')
     print(f'Written to {OUT_FILE}')
 
     # Spot-check Azure Sphyra

@@ -135,7 +135,10 @@ def _get_tool_power(recipe, tools):
 
 
 def _skill_name(recipe, skill_names):
-    """Extract skill name from a recipe's level requirements."""
+    """Extract skill name from a recipe's level requirements (or bare skill_id)."""
+    # Cargo recipes store skill_id directly at top level
+    if 'skill_id' in recipe and recipe['skill_id'] is not None:
+        return skill_names.get(recipe['skill_id'], f'skill_{recipe["skill_id"]}')
     reqs = recipe.get('levelRequirements') or recipe.get('level_requirements', [])
     if reqs:
         sid = reqs[0].get('skill_id')
@@ -187,8 +190,6 @@ def _pick_best_crafting(recipe_list, tools, all_obtainable, item_id=None):
         )
 
     for recipe in recipe_list:
-        if 'unpack' in recipe.get('name', '').lower():
-            continue
         if is_enrichment(recipe):
             continue
         item_ings = [
@@ -198,9 +199,9 @@ def _pick_best_crafting(recipe_list, tools, all_obtainable, item_id=None):
         if item_ings and not all(str(i['item_id']) in all_obtainable for i in item_ings):
             continue
         return recipe
-    # Fallback: return first non-unpack, non-enrichment recipe regardless of ingredients
+    # Fallback: return first non-enrichment recipe regardless of ingredients
     for recipe in recipe_list:
-        if 'unpack' not in recipe.get('name', '').lower() and not is_enrichment(recipe):
+        if not is_enrichment(recipe):
             return recipe
     return None
 
@@ -224,8 +225,6 @@ def _find_loot_source(item_id, all_recipes):
         if src_id == item_id:
             continue  # skip self-enrichment (e.g. Enrich Fine Bait on Fine Bait itself)
         for urec in src_rec.get('using', []):
-            if 'unpack' in urec.get('name', '').lower():
-                continue
             # Skip if the target item is also consumed (enrichment pattern)
             consumed_ids = {str(i.get('item_id', '')) for i in urec.get('consumedItemStacks', [])}
             if item_id in consumed_ids:
@@ -275,10 +274,12 @@ def _resolve_extraction_entry(item_id, quantity, entry, tools, acc, visited,
     stamina_per_item = entry['stamina_per_cast'] / (prob * tp)
     time_per_item    = entry['time_per_cast']    / (prob * tp)
     skill = _skill_name(entry, skill_names)
+    item_name = (all_recipes.get(item_id) or {}).get('name') or item_id
 
     acc.add_gather(skill, stamina_per_item * quantity, time_per_item * quantity)
     acc.add_step(
         item_id=item_id,
+        item_name=item_name,
         method='extraction',
         skill=skill,
         tool_power=tp,
@@ -316,10 +317,12 @@ def _resolve_crafting_recipe(item_id, quantity, recipe, tools, acc, visited,
     total_stamina = (actions / tp) * recipe.get('staminaRequirement', 0.0) * crafts_needed
     total_time    = (actions / tp) * recipe.get('timeRequirement',    0.0) * crafts_needed
     skill = _skill_name(recipe, skill_names)
+    item_name = (all_recipes.get(item_id) or {}).get('name') or item_id
 
     acc.add_craft(skill, total_stamina, total_time)
     acc.add_step(
         item_id=item_id,
+        item_name=item_name,
         method='crafting',
         recipe_name=recipe.get('name', ''),
         skill=skill,
@@ -340,6 +343,75 @@ def _resolve_crafting_recipe(item_id, quantity, recipe, tools, acc, visited,
             all_recipes, game_data, tools, acc,
             visited, depth + 1, skill_names,
         )
+
+
+# ---------------------------------------------------------------------------
+# Cargo resolution (PATH E)
+# ---------------------------------------------------------------------------
+
+def _resolve_cargo_gathering(cargo_id, quantity, game_data, tools, acc, skill_names, cargo_name=''):
+    """Calculate gathering effort to obtain `quantity` units of a Cargo item."""
+    entries = game_data.get('cargo_extraction', {}).get(cargo_id, [])
+    if not entries:
+        acc.add_ingredient(f'cargo:{cargo_id}', quantity, cargo_name or cargo_id)
+        acc.warn(f'No extraction data for cargo {cargo_id} ({cargo_name}) — counted as external.')
+        return
+
+    best = _pick_best_extraction(entries, tools)
+    if not best:
+        acc.add_ingredient(f'cargo:{cargo_id}', quantity, cargo_name or cargo_id)
+        return
+
+    tp = _get_tool_power(best, tools)
+    prob = best['prob_per_hp']
+    stamina_per_cargo = best['stamina_per_cast'] / (prob * tp)
+    time_per_cargo    = best['time_per_cast']    / (prob * tp)
+    skill = _skill_name(best, skill_names)
+
+    acc.add_gather(skill, stamina_per_cargo * quantity, time_per_cargo * quantity)
+    acc.add_step(
+        item_id=f'cargo:{cargo_id}',
+        item_name=cargo_name or cargo_id,
+        method='extraction',
+        skill=skill,
+        tool_power=tp,
+        quantity=quantity,
+        stamina=round(stamina_per_cargo * quantity, 2),
+        time_sec=round(time_per_cargo * quantity, 2),
+    )
+
+
+def _resolve_cargo_recipe(item_id, quantity, recipe, tools, acc, all_recipes,
+                           game_data, skill_names):
+    """PATH E: Process a gatherable Cargo item into regular items."""
+    tp = _get_tool_power(recipe, tools)
+    output_qty = max(recipe.get('output_quantity', 1), 1)
+    actions = max(recipe.get('actions_required', 1), 1)
+    crafts_needed = quantity / output_qty
+
+    total_stamina = (actions / tp) * recipe.get('stamina_per_action', 0.0) * crafts_needed
+    total_time    = (actions / tp) * recipe.get('time_per_action',    0.0) * crafts_needed
+    skill = _skill_name(recipe, skill_names)
+    item_name = (all_recipes.get(item_id) or {}).get('name') or item_id
+
+    acc.add_craft(skill, total_stamina, total_time)
+    acc.add_step(
+        item_id=item_id,
+        item_name=item_name,
+        method='crafting',
+        recipe_name=recipe.get('recipe_name', ''),
+        skill=skill,
+        tool_power=tp,
+        quantity=quantity,
+        stamina=round(total_stamina, 2),
+        time_sec=round(total_time, 2),
+    )
+
+    cargo_id   = recipe.get('cargo_input_id', '')
+    cargo_qty  = recipe.get('cargo_input_qty', 1) * crafts_needed
+    cargo_name = recipe.get('cargo_input_name', cargo_id)
+    if cargo_id:
+        _resolve_cargo_gathering(cargo_id, cargo_qty, game_data, tools, acc, skill_names, cargo_name)
 
 
 # ---------------------------------------------------------------------------
@@ -441,6 +513,20 @@ def resolve_effort(
             depth, all_recipes, game_data, skill_names,
         )
         return  # _resolve_crafting_recipe recurses on source item automatically
+
+    # --- PATH E: Cargo-based crafting (e.g. Ferralith Ore Chunk → Ore Pieces) ---
+    cargo_recipes = game_data.get('cargo_by_item', {}).get(item_id)
+    if cargo_recipes:
+        # Prefer recipe where player has matching tool; otherwise use first
+        best_cargo = next(
+            (r for r in cargo_recipes if _get_tool_power(r, tools) > 1),
+            cargo_recipes[0],
+        )
+        _resolve_cargo_recipe(
+            item_id, quantity, best_cargo, tools, acc, all_recipes,
+            game_data, skill_names,
+        )
+        return
 
     # --- Fallback: external ingredient ---
     acc.add_ingredient(item_id, quantity, name)
