@@ -464,6 +464,23 @@ def resolve_effort(
     recipe = all_recipes.get(item_id, {})
     name = recipe.get('name', item_id)
 
+    # --- PATH E: Cargo-based processing (FIRST — trunk/ore chunk chains take priority) ---
+    # Items like Rough Wood Log or Ferralith Ore Piece are produced by processing
+    # gatherable cargo (Rough Wood Trunk, Ferralith Ore Chunk). Check this before
+    # extraction so we follow the trunk→log / chunk→piece chain rather than
+    # any direct-extraction fallback.
+    cargo_recipes = game_data.get('cargo_by_item', {}).get(item_id)
+    if cargo_recipes:
+        best_cargo = next(
+            (r for r in cargo_recipes if _get_tool_power(r, tools) > 1),
+            cargo_recipes[0],
+        )
+        _resolve_cargo_recipe(
+            item_id, quantity, best_cargo, tools, acc, all_recipes,
+            game_data, skill_names,
+        )
+        return
+
     # --- PATH A: Extraction recipe in recipes.json ---
     if recipe.get('extraction'):
         best = _pick_best_extraction(recipe['extraction'], tools, item_id)
@@ -486,7 +503,11 @@ def resolve_effort(
             return
 
     # --- PATH C: Crafting recipe in recipes.json ---
-    all_known = set(all_recipes.keys()) | set(game_data.get('extraction_by_item', {}).keys())
+    all_known = (
+        set(all_recipes.keys())
+        | set(game_data.get('extraction_by_item', {}).keys())
+        | set(game_data.get('cargo_by_item', {}).keys())
+    )
     if recipe.get('crafting'):
         best = _pick_best_crafting(recipe['crafting'], tools, all_known, item_id)
         if best:
@@ -513,20 +534,6 @@ def resolve_effort(
             depth, all_recipes, game_data, skill_names,
         )
         return  # _resolve_crafting_recipe recurses on source item automatically
-
-    # --- PATH E: Cargo-based crafting (e.g. Ferralith Ore Chunk → Ore Pieces) ---
-    cargo_recipes = game_data.get('cargo_by_item', {}).get(item_id)
-    if cargo_recipes:
-        # Prefer recipe where player has matching tool; otherwise use first
-        best_cargo = next(
-            (r for r in cargo_recipes if _get_tool_power(r, tools) > 1),
-            cargo_recipes[0],
-        )
-        _resolve_cargo_recipe(
-            item_id, quantity, best_cargo, tools, acc, all_recipes,
-            game_data, skill_names,
-        )
-        return
 
     # --- Fallback: external ingredient ---
     acc.add_ingredient(item_id, quantity, name)

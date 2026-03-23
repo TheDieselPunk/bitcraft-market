@@ -244,6 +244,46 @@ def build_cargo_by_item(crafting_recipes, cargo_extraction, cargo_names):
     return by_item
 
 
+def resolve_cargo_output_wrappers(cargo_by_item):
+    """
+    Some cargo processing recipes produce wrapper items (e.g. "Rough Wood Log Output")
+    that resolve to actual items via itemListPossibilities, exactly like fish extraction
+    wrappers. Fetch itemListPossibilities for all cargo output items and re-key
+    cargo_by_item by the actual item IDs with adjusted expected output_quantity.
+
+    E.g. Rough Wood Trunk → split → Rough Wood Log Output (wrapper)
+         Rough Wood Log Output → itemListPossibilities → 6× Rough Wood Log
+         Result: cargo_by_item['1010001'] = [{..., output_quantity: 6, ...}]
+    """
+    wrapper_ids = list(cargo_by_item.keys())
+    resolved = 0
+    for wid in wrapper_ids:
+        try:
+            d = bitjita_get(f'/api/items/{wid}')
+            ilp = d.get('itemListPossibilities', [])
+            if not ilp:
+                continue
+            # Sum expected yield per actual item across all matching possibilities
+            loot_map = {}
+            for loot_entry in ilp:
+                aid = str(loot_entry.get('targetId', ''))
+                if aid:
+                    loot_map[aid] = (
+                        loot_map.get(aid, 0.0)
+                        + loot_entry.get('chance', 1.0) * loot_entry.get('quantity', 1)
+                    )
+            for actual_id, expected_yield in loot_map.items():
+                for entry in cargo_by_item[wid]:
+                    new_entry = dict(entry)
+                    new_entry['output_quantity'] = expected_yield
+                    cargo_by_item.setdefault(actual_id, []).append(new_entry)
+                resolved += 1
+        except Exception:
+            pass
+    print(f'  Resolved {resolved} cargo output wrapper -> actual item mappings.')
+    return cargo_by_item
+
+
 def bitjita_get(path):
     url = f'{BITJITA_BASE}{path}'
     req = urllib.request.Request(url, headers=BITJITA_HEADERS)
@@ -310,7 +350,11 @@ def main():
     resource_max_health = build_resource_max_health(resource_list)
     cargo_extraction   = build_cargo_extraction(extraction_recipes)
     cargo_by_item      = build_cargo_by_item(crafting_recipes, cargo_extraction, cargo_names)
-    print(f'  {len(cargo_extraction)} gatherable cargo types, {len(cargo_by_item)} items via cargo processing.')
+    print(f'  {len(cargo_extraction)} gatherable cargo types, {len(cargo_by_item)} wrapper items via cargo processing.')
+    print('Resolving cargo output wrappers (e.g. "Rough Wood Log Output" -> actual items)...')
+    resolve_cargo_output_wrappers(cargo_by_item)
+    actual_cargo_items = len([k for k in cargo_by_item if not any(k == e['cargo_input_id'] for entries in cargo_by_item.values() for e in entries)])
+    print(f'  {len(cargo_by_item)} total cargo_by_item entries after wrapper resolution.')
 
     # Collect actual fish/node item IDs (from on_destroy_yield mappings)
     actual_item_ids = set()
