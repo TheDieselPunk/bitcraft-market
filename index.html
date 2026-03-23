@@ -225,6 +225,48 @@
     .sort-arrow { font-size: 10px; margin-left: 4px; }
 
     #results-section { display: none; }
+
+    /* ── Effort panel ── */
+    .effort-panel-row td { padding: 0; border-top: 2px solid var(--accent2); }
+    tr.effort-active { background: #1e2a3e !important; }
+    .effort-panel {
+      background: var(--surface); padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .effort-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px; gap: 12px; flex-wrap: wrap;
+    }
+    .effort-title { font-weight: 600; font-size: 14px; color: var(--accent2); }
+    .effort-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .effort-qty-input {
+      width: 80px; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--fg); border-radius: 4px; padding: 3px 8px; font-size: 12px;
+      margin-left: 4px; outline: none;
+    }
+    .effort-table {
+      width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 14px;
+      border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+    }
+    .effort-table th {
+      background: var(--surface2); color: var(--fg-dim);
+      padding: 7px 12px; font-size: 11px;
+      text-transform: uppercase; letter-spacing: .04em; cursor: default;
+    }
+    .effort-table th:hover { color: var(--fg-dim); }
+    .effort-table td { padding: 7px 12px; border-top: 1px solid var(--border); }
+    .effort-section-title {
+      font-size: 11px; color: var(--fg-dim); text-transform: uppercase;
+      letter-spacing: .05em; margin: 10px 0 6px;
+    }
+    .effort-costs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .effort-cost-chip {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 3px 10px; font-size: 12px;
+    }
+    .effort-chain { display: flex; flex-direction: column; gap: 4px; }
+    .chain-step { display: flex; align-items: center; gap: 10px; font-size: 12px; padding: 4px 0; }
+    .effort-loading { display: flex; align-items: center; gap: 12px; color: var(--fg-dim); padding: 16px 0; }
   </style>
 </head>
 <body>

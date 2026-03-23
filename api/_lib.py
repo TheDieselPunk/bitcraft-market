@@ -15,6 +15,24 @@ HEADERS = {
 
 # Path to pre-built recipe cache (populated by GitHub Actions)
 RECIPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'recipes.json')
+GAME_DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'game_data.json')
+
+SKILL_NAMES = {
+    1: 'Mining',     2: 'Logging',        3: 'Carpentry',  4: 'Masonry',
+    5: 'Smelting',   6: 'Smithing',       7: 'Scholar',    8: 'Leatherworking',
+    9: 'Hunting',   10: 'Tailoring',     11: 'Farming',   12: 'Fishing',
+   13: 'Cooking',   14: 'Foraging',      15: 'Construction', 17: 'Alchemy',
+   18: 'Slayer',    21: 'Sailing',       22: 'Hexite Gathering',
+}
+
+
+def load_game_data():
+    """Load the supplemental game data cache (extraction mechanics). Returns safe defaults if missing."""
+    try:
+        with open(GAME_DATA_PATH) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {'extraction_by_item': {}, 'resource_max_health': {}}
 
 
 def api_get(path, params=None):

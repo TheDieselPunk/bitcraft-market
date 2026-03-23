@@ -207,7 +207,8 @@ def main():
         OUT_FILE.write_text(json.dumps(updated))
         print(f'  Done in {time.monotonic()-t0:.1f}s.')
 
-    # ── Pass 4: ingredient items (raw mats used in crafting) ────────────────
+    # ── Pass 4: ingredient items (raw mats used in crafting or extraction) ───
+    # Collect items consumed in crafting recipes
     ingredient_ids = {
         str(ing['item_id'])
         for r in updated.values()
@@ -218,12 +219,42 @@ def main():
         if ing.get('item_type') == 'item'
         and str(ing['item_id']) not in updated
     }
+    # Also collect items consumed in extraction recipes (e.g. bait)
+    ingredient_ids |= {
+        str(ing['item_id'])
+        for r in updated.values()
+        if not r.get('intermediate') and not r.get('ingredient')
+        for recipe in r.get('extraction', [])
+        for ing in recipe.get('consumedItemStacks', [])
+        if ing.get('item_type') == 'item'
+        and str(ing['item_id']) not in updated
+    }
 
     if ingredient_ids:
         print(f'\nPass 4 — ingredient items ({len(ingredient_ids)})…')
         t0 = time.monotonic()
         results = fetch_batch(list(ingredient_ids),
                               fetch_ingredient_item, 'ingredient')
+        updated.update(results)
+
+    # ── Pass 5: ingredients of extraction-consumed items (e.g. bait crafting) ─
+    # One more pass to pull in items needed to craft bait / other extraction inputs.
+    bait_ingredient_ids = {
+        str(ing['item_id'])
+        for iid, r in updated.items()
+        if r.get('ingredient')
+        for recipe in r.get('crafting', [])
+        if 'unpack' not in recipe.get('name', '').lower()
+        for ing in recipe.get('consumedItemStacks', [])
+        if ing.get('item_type') == 'item'
+        and str(ing['item_id']) not in updated
+    }
+
+    if bait_ingredient_ids:
+        print(f'\nPass 5 — bait/extraction ingredient items ({len(bait_ingredient_ids)})…')
+        t0 = time.monotonic()
+        results = fetch_batch(list(bait_ingredient_ids),
+                              fetch_ingredient_item, 'bait-ingredient')
         updated.update(results)
 
     # ── Summary + metadata ───────────────────────────────────────────────────

@@ -17,13 +17,16 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Build game data cache
+        run: python scripts/build_game_data.py
+
       - name: Build recipe cache
         run: python scripts/build_recipes.py
 
-      - name: Commit updated recipes.json
+      - name: Commit updated data files
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/recipes.json
+          git add data/game_data.json data/recipes.json
           git diff --cached --quiet || git commit -m "chore: refresh recipe cache [skip ci]"
           git push

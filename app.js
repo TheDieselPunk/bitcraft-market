@@ -209,7 +209,11 @@ function buildTagFilters() {
 
 // ── Table ──────────────────────────────────────────────────────────────────
 
+let effortPanelRow = null;
+let effortItemId   = null;
+
 function renderTable() {
+  closeEffortPanel();
   const visible = activeTags.size
     ? allItems.filter(r => activeTags.has(normalizeTag(r.tag)))
     : allItems;
@@ -242,8 +246,8 @@ function renderTable() {
     const tr = document.createElement('tr');
     if (r.source === 'none') tr.classList.add('unobtainable');
     tr.style.cursor = 'pointer';
-    tr.title = 'View on bitjita.com';
-    tr.addEventListener('click', () => window.open(`https://bitjita.com/market/item/${r.id}`, '_blank'));
+    tr.title = 'Click to view effort breakdown';
+    tr.addEventListener('click', () => toggleEffortPanel(r, tr));
     tr.innerHTML = `
       <td>${escHtml(r.name)}</td>
       <td class="tier-tag">${escHtml(tierTag)}</td>
@@ -274,6 +278,156 @@ function sortBy(col) {
   ths.forEach(th => { if (th.querySelector(`#arrow-${col}`)) th.classList.add('sorted'); });
 
   renderTable();
+}
+
+// ── Effort panel ───────────────────────────────────────────────────────────
+
+function toggleEffortPanel(item, sourceTr) {
+  if (effortItemId === item.id) { closeEffortPanel(); return; }
+  closeEffortPanel();
+
+  effortItemId = item.id;
+  sourceTr.classList.add('effort-active');
+
+  const panelTr = document.createElement('tr');
+  panelTr.className = 'effort-panel-row';
+  panelTr.innerHTML = `
+    <td colspan="6">
+      <div class="effort-panel" id="effort-panel">
+        <div class="effort-loading">
+          <div class="spinner" style="width:20px;height:20px;border-width:2px"></div>
+          <span>Calculating effort for ${escHtml(item.name)}\u2026</span>
+        </div>
+      </div>
+    </td>
+  `;
+  sourceTr.after(panelTr);
+  effortPanelRow = panelTr;
+
+  _doFetchEffort(item, 1);
+}
+
+function closeEffortPanel() {
+  if (effortPanelRow) { effortPanelRow.remove(); effortPanelRow = null; }
+  document.querySelectorAll('.effort-active').forEach(r => r.classList.remove('effort-active'));
+  effortItemId = null;
+}
+
+function refetchEffort(itemId) {
+  const qty  = parseFloat(document.getElementById('effort-qty-input')?.value) || 1;
+  const item = allItems.find(i => String(i.id) === String(itemId));
+  if (!item) return;
+  const panel = document.getElementById('effort-panel');
+  if (panel) panel.innerHTML = `
+    <div class="effort-loading">
+      <div class="spinner" style="width:20px;height:20px;border-width:2px"></div>
+      <span>Calculating\u2026</span>
+    </div>
+  `;
+  _doFetchEffort(item, qty);
+}
+
+async function _doFetchEffort(item, quantity) {
+  const params = new URLSearchParams({ item_id: item.id, quantity });
+  if (playerId) params.set('player_id', playerId);
+
+  try {
+    const res  = await fetch(`${API}/api/effort?${params}`);
+    const data = await res.json();
+    if (!effortPanelRow) return;
+    const panel = document.getElementById('effort-panel');
+    if (!panel) return;
+    if (!res.ok || data.error) {
+      panel.innerHTML = `<div style="color:var(--red);padding:12px">${escHtml(data.error || 'Failed to calculate effort.')}</div>`;
+      return;
+    }
+    _renderEffortPanel(data, item);
+  } catch (e) {
+    const panel = document.getElementById('effort-panel');
+    if (panel) panel.innerHTML = `<div style="color:var(--red);padding:12px">Failed to reach the server.</div>`;
+  }
+}
+
+function _renderEffortPanel(data, item) {
+  const panel = document.getElementById('effort-panel');
+  if (!panel) return;
+
+  const fmt  = n => (n > 0) ? Math.round(n).toLocaleString() : '—';
+  const fmtT = n => (n > 0) ? (n / 60).toLocaleString(undefined, {maximumFractionDigits: 1}) + ' min' : '—';
+
+  // Profession breakdown table
+  const profs = data.by_profession || {};
+  const profRows = Object.entries(profs).map(([prof, v]) => `
+    <tr>
+      <td>${escHtml(prof)}</td>
+      <td class="num">${fmt(v.gathering_stamina)}</td>
+      <td class="num">${fmtT(v.gathering_time)}</td>
+      <td class="num">${fmt(v.crafting_stamina)}</td>
+      <td class="num">${fmtT(v.crafting_time)}</td>
+    </tr>`).join('');
+
+  const profTable = profRows
+    ? `<table class="effort-table">
+        <thead><tr>
+          <th>Profession</th>
+          <th class="num">Gather Stam</th><th class="num">Gather Time</th>
+          <th class="num">Craft Stam</th><th class="num">Craft Time</th>
+        </tr></thead>
+        <tbody>${profRows}</tbody>
+       </table>`
+    : `<div style="color:var(--fg-dim);font-size:12px">No effort data available.</div>`;
+
+  // External ingredient costs
+  const costs = data.ingredient_costs || {};
+  const costEntries = Object.entries(costs);
+  const costsHtml = costEntries.length
+    ? `<div class="effort-section-title">External Inputs</div>
+       <div class="effort-costs">${costEntries.map(([id, info]) =>
+         `<span class="effort-cost-chip">${escHtml(info.name || id)} \xd7 ${Math.round(info.quantity).toLocaleString()}</span>`
+       ).join('')}</div>`
+    : '';
+
+  // Production chain
+  const chain = data.chain || [];
+  const chainHtml = chain.length
+    ? `<div class="effort-section-title">Production Chain</div>
+       <div class="effort-chain">${chain.map(s => {
+         const method = s.method === 'extraction' ? 'gather' : 'craft';
+         const power  = s.tool_power ? ` (power ${s.tool_power})` : '';
+         const qty    = s.quantity != null ? parseFloat(s.quantity.toFixed(1)).toLocaleString() : '?';
+         return `<div class="chain-step">
+           <span class="badge ${method}">${method}</span>
+           <span>${escHtml(s.item_name)} \xd7 ${qty}</span>
+           <span style="color:var(--fg-dim)">${escHtml(s.skill || '')}${escHtml(power)}</span>
+         </div>`;
+       }).join('')}</div>`
+    : '';
+
+  // Warnings
+  const warnings = (data.warnings || []);
+  const warnsHtml = warnings.length
+    ? `<div style="color:var(--fg-dim);font-size:12px;margin-top:8px">${warnings.map(w => `\u26a0 ${escHtml(w)}`).join('<br>')}</div>`
+    : '';
+
+  panel.innerHTML = `
+    <div class="effort-header">
+      <span class="effort-title">Effort: ${escHtml(data.item_name)} \xd7 ${parseFloat(data.quantity).toLocaleString()}</span>
+      <div class="effort-header-actions">
+        <label style="font-size:12px;color:var(--fg-dim)">Qty:
+          <input type="number" id="effort-qty-input" class="effort-qty-input" value="${data.quantity}" min="1" />
+        </label>
+        <button class="btn secondary" style="padding:4px 10px;font-size:12px"
+          onclick="refetchEffort('${escHtml(String(item.id))}')">\u21bb Recalc</button>
+        <a href="https://bitjita.com/market/item/${escHtml(String(item.id))}" target="_blank"
+           class="btn secondary" style="padding:4px 10px;font-size:12px;text-decoration:none">\u2197 bitjita</a>
+        <button class="btn secondary" style="padding:4px 10px;font-size:12px" onclick="closeEffortPanel()">\u2715</button>
+      </div>
+    </div>
+    ${profTable}
+    ${costsHtml}
+    ${chainHtml}
+    ${warnsHtml}
+  `;
 }
 
 // ── UI helpers ─────────────────────────────────────────────────────────────
