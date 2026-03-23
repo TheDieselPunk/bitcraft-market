@@ -18,11 +18,12 @@ RECIPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'recipes.js
 GAME_DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'game_data.json')
 
 SKILL_NAMES = {
-    1: 'Mining',     2: 'Logging',        3: 'Carpentry',  4: 'Masonry',
-    5: 'Smelting',   6: 'Smithing',       7: 'Scholar',    8: 'Leatherworking',
-    9: 'Hunting',   10: 'Tailoring',     11: 'Farming',   12: 'Fishing',
-   13: 'Cooking',   14: 'Foraging',      15: 'Construction', 17: 'Alchemy',
-   18: 'Slayer',    21: 'Sailing',       22: 'Hexite Gathering',
+    1: 'ANY',            2: 'Forestry',      3: 'Carpentry',   4: 'Masonry',
+    5: 'Mining',         6: 'Smithing',      7: 'Scholar',     8: 'Leatherworking',
+    9: 'Hunting',       10: 'Tailoring',    11: 'Farming',    12: 'Fishing',
+   13: 'Cooking',       14: 'Foraging',     15: 'Construction',
+   17: 'Taming',        18: 'Slayer',       19: 'Merchanting',
+   21: 'Sailing',       22: 'Hexite Gathering',
 }
 
 
