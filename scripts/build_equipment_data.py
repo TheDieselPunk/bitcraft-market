@@ -43,8 +43,8 @@ SLOT_MAP = {
     'HandArtifact':  'jewelry',  # Rings
 }
 
-# Rarity string from numeric code
-RARITY_STR = {0: 'Common', 1: 'Common', 2: 'Uncommon', 3: 'Rare', 4: 'Epic', 5: 'Legendary'}
+# Sort order for rarity strings
+RARITY_ORDER = {'Common': 0, 'Uncommon': 1, 'Rare': 2, 'Epic': 3, 'Legendary': 4}
 
 # Stats relevant to the Equipment Simulator (others are ignored for now)
 RELEVANT_STATS = {
@@ -112,8 +112,9 @@ def build_equipment_catalog(items_list, equip_list):
             skipped += 1
             continue
 
-        rarity_int = item.get('rarity', 0)
-        rarity_str = RARITY_STR.get(rarity_int, 'Common')
+        rarity_str = item.get('rarity', 'Common')
+        if rarity_str not in RARITY_ORDER:
+            rarity_str = 'Common'
 
         # Filter stats to relevant ones
         stats = [
@@ -126,7 +127,7 @@ def build_equipment_catalog(items_list, equip_list):
             'id':         str(iid),
             'name':       item['name'],
             'tier':       item.get('tier', 0),
-            'rarity':     rarity_int,
+            'rarity':     RARITY_ORDER.get(rarity_str, 0),
             'rarity_str': rarity_str,
             'slot':       slot,
             'stats':      stats,
@@ -199,12 +200,11 @@ def build_buff_catalog(items_list, food_list, buff_list):
         if not resolved_buffs:
             continue
 
-        rarity_int = item.get('rarity', 0)
         entry = {
             'id':     str(iid),
             'name':   item['name'],
             'tier':   item.get('tier', 0),
-            'rarity': rarity_int,
+            'rarity': RARITY_ORDER.get(item.get('rarity', 'Common'), 0),
             'tag':    tag,
             'buffs':  resolved_buffs,
             'hunger': food.get('hunger', 0),
