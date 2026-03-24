@@ -485,22 +485,26 @@ async function autofillPlayer() {
 function autofillEquipment(itemsLookup, inventories) {
   if (!equipData) return;
 
-  // Build item_id -> entry lookup from equipment catalog
-  const idToEntry = {};
-  for (const [slot, entries] of Object.entries(equipData.equipment || {})) {
+  // Build name+tier+rarity -> entry lookup (immune to ID variant mismatches)
+  // Bitjita's items lookup provides rarityStr which matches our rarity_str directly.
+  const nameToEntry = {};
+  for (const entries of Object.values(equipData.equipment || {})) {
     for (const entry of entries) {
-      idToEntry[String(entry.id)] = entry;
+      const key = `${entry.name}|${entry.tier}|${entry.rarity_str}`;
+      nameToEntry[key] = entry;
     }
   }
 
-  // Scan all inventory pockets
+  // Scan all inventory pockets; use bitjita's item details for matching
   const foundSlots = {};
   for (const bag of inventories) {
     for (const pocket of bag.pockets || []) {
       const contents = pocket.contents;
       if (!contents) continue;
-      const itemId = String(contents.itemId);
-      const entry = idToEntry[itemId];
+      const info = itemsLookup[String(contents.itemId)] || {};
+      if (!info.name) continue;
+      const key = `${info.name}|${info.tier}|${info.rarityStr}`;
+      const entry = nameToEntry[key];
       if (entry && entry.slot && !foundSlots[entry.slot]) {
         foundSlots[entry.slot] = entry;
       }
