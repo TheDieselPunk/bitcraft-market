@@ -6,6 +6,7 @@
     { "src": "api/version.py",      "use": "@vercel/python" },
     { "src": "api/effort.py",       "use": "@vercel/python" },
     { "src": "api/inventories.py",  "use": "@vercel/python" },
+    { "src": "data/**",             "use": "@vercel/static" },
     { "src": "index.html",          "use": "@vercel/static" },
     { "src": "app.js",              "use": "@vercel/static" },
     { "src": "equipment_sim.html",  "use": "@vercel/static" }
