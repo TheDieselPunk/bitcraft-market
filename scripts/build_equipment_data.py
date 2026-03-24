@@ -136,6 +136,15 @@ def build_equipment_catalog(items_list, equip_list):
     if skipped:
         print(f'  Skipped {skipped} items (no equipment_desc entry or unknown slot).')
 
+    # Deduplicate by (name, tier, rarity) — keep entry with most stats
+    for slot in by_slot:
+        seen = {}
+        for entry in by_slot[slot]:
+            key = (entry['name'], entry['tier'], entry['rarity_str'])
+            if key not in seen or len(entry['stats']) > len(seen[key]['stats']):
+                seen[key] = entry
+        by_slot[slot] = list(seen.values())
+
     # Sort: tier asc, then rarity asc
     for slot in by_slot:
         by_slot[slot].sort(key=lambda e: (e['tier'], e['rarity']))
