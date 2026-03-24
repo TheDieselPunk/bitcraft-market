@@ -29,9 +29,11 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             data = api_get(f'/api/players/{player_id}/inventories')
+            eq_data = api_get(f'/api/players/{player_id}/equipment')
             self._send(200, {
                 'items':       data.get('items', {}),
                 'inventories': data.get('inventories', []),
+                'equipment':   eq_data.get('equipment', []),
             })
         except Exception as e:
             self._send(500, {'error': str(e)})

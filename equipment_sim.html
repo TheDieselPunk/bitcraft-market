@@ -472,7 +472,7 @@ async function autofillPlayer() {
     const ir = await fetch(`/api/inventories?player_id=${playerId}`);
     if (ir.ok) {
       const inv = await ir.json();
-      autofillEquipment(inv.items || {}, inv.inventories || []);
+      autofillEquipment(inv.equipment || []);
     }
 
     status.textContent = `Loaded: ${name}`;
@@ -482,11 +482,22 @@ async function autofillPlayer() {
   }
 }
 
-function autofillEquipment(itemsLookup, inventories) {
+// Maps /equipment endpoint primary names -> our slot keys
+const PRIMARY_TO_SLOT = {
+  'head_clothing':  'head',
+  'torso_clothing': 'torso',
+  'belt_clothing':  'belt',
+  'leg_clothing':   'legs',
+  'feet_clothing':  'feet',
+  'hand_clothing':  'hands',
+  'head_artifact':  'heart',
+  'hand_artifact':  'jewelry',
+};
+
+function autofillEquipment(equipment) {
   if (!equipData) return;
 
-  // Build name+tier+rarity -> entry lookup (immune to ID variant mismatches)
-  // Bitjita's items lookup provides rarityStr which matches our rarity_str directly.
+  // Build name+tier+rarity_str -> catalog entry lookup
   const nameToEntry = {};
   for (const entries of Object.values(equipData.equipment || {})) {
     for (const entry of entries) {
@@ -495,25 +506,18 @@ function autofillEquipment(itemsLookup, inventories) {
     }
   }
 
-  // Scan all inventory pockets; use bitjita's item details for matching
-  const foundSlots = {};
-  for (const bag of inventories) {
-    for (const pocket of bag.pockets || []) {
-      const contents = pocket.contents;
-      if (!contents) continue;
-      const info = itemsLookup[String(contents.itemId)] || {};
-      if (!info.name) continue;
-      const key = `${info.name}|${info.tier}|${info.rarityStr}`;
-      const entry = nameToEntry[key];
-      if (entry && entry.slot && !foundSlots[entry.slot]) {
-        foundSlots[entry.slot] = entry;
-      }
+  // /equipment returns [{primary, item}] — item.rarityString is the rarity label
+  for (const slotItem of equipment) {
+    const item = slotItem.item;
+    if (!item) continue;
+    const slot = PRIMARY_TO_SLOT[slotItem.primary];
+    if (!slot) continue;
+    const key = `${item.name}|${item.tier}|${item.rarityString}`;
+    const entry = nameToEntry[key];
+    if (entry) {
+      equippedItems[slot] = entry;
+      renderSlot(slot);
     }
-  }
-
-  for (const [slot, entry] of Object.entries(foundSlots)) {
-    equippedItems[slot] = entry;
-    renderSlot(slot);
   }
 }
 
