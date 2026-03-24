@@ -91,14 +91,14 @@
     .eq-slot .slot-item { font-size: 9px; line-height: 1.1; font-weight: 600; word-break: break-word; text-align: center; }
 
     /* Slot positions matching equip.png layout */
-    /* Head top-right outside frame */
-    .slot-head    { top:   0px; right:  0px; }
+    /* Head centered above torso */
+    .slot-head    { top:   0px; left:  104px; }
     /* Torso center upper */
-    .slot-torso   { top:  50px; left:  104px; }
-    /* Belt mid-left arm */
-    .slot-belt    { top: 140px; left:   12px; }
-    /* Hands left arm lower */
-    .slot-hands   { top: 210px; left:   12px; }
+    .slot-torso   { top:  60px; left:  104px; }
+    /* Belt centered between torso and legs */
+    .slot-belt    { top: 140px; left:  104px; }
+    /* Hands left arm (where belt was) */
+    .slot-hands   { top: 140px; left:   12px; }
     /* Heart right side */
     .slot-heart   { top: 130px; right:   0px; }
     /* Legs center */
@@ -555,7 +555,6 @@ function setToolLevel(toolType, val) {
 // ── Slot picker modal ──────────────────────────────────────────────────────
 
 function openSlotPicker(slot) {
-  if (!equipData) return;
   activeSlot = slot;
   const slotName = slot.charAt(0).toUpperCase() + slot.slice(1);
   document.getElementById('modal-title').textContent = `Choose ${slotName}`;
@@ -587,12 +586,16 @@ function filterModal() {
 }
 
 function renderModalList(query) {
-  if (!equipData || !activeSlot) return;
+  if (!activeSlot) return;
+  const list = document.getElementById('modal-list');
+  if (!equipData) {
+    list.innerHTML = '<div class="modal-none">Loading data…</div>';
+    return;
+  }
   const entries = (equipData.equipment || {})[activeSlot] || [];
   const q = query.toLowerCase();
   const filtered = q ? entries.filter(e => e.name.toLowerCase().includes(q)) : entries;
 
-  const list = document.getElementById('modal-list');
   list.innerHTML = '';
 
   if (filtered.length === 0) {
