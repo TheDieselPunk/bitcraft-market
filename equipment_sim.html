@@ -638,7 +638,8 @@ function summariseStats(stats) {
     .filter(s => s.value !== 0)
     .map(s => {
       const v = s.is_pct ? `+${(s.value * 100).toFixed(1)}%` : `+${s.value}`;
-      return `${v} ${s.name}`;
+      const label = s.id.replace(/Speed$/, ' Spd').replace(/CritChance$/, ' Crit').replace(/Multiplier$/, '').replace(/Max/, 'Max ');
+      return `${v} ${label}`;
     })
     .join(', ');
 }
