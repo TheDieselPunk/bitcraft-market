@@ -61,6 +61,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
     methods = []
     ebi = game_data.get('extraction_by_item', {})
     cbi = game_data.get('cargo_by_item', {})
+    cex = game_data.get('cargo_extraction', {})
     rmh = game_data.get('resource_max_health', {})
 
     sid = str(item_id)
@@ -120,7 +121,9 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
         proc_time    = proc_actions * ce.get('time_per_action', 1.6)
         cargo_name   = ce.get('cargo_input_name', item_name(fish_id, recipes))
 
-        for fe in ebi.get(fish_id, []):
+        # Cargo source may be in extraction_by_item (wrapper-resolved) OR cargo_extraction (direct)
+        fish_sources = ebi.get(fish_id, []) + cex.get(fish_id, [])
+        for fe in fish_sources:
             f_tool_reqs = fe.get('tool_requirements', [])
             f_tool_type = f_tool_reqs[0]['tool_type'] if f_tool_reqs else None
             f_power = tool_powers.get(f_tool_type, 1) if f_tool_type is not None else 1
