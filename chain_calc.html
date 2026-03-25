@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chain Calculator — Bitcraft</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #1e1e2e;
+      --surface:   #2a2a3e;
+      --surface2:  #313244;
+      --surface3:  #3a3a50;
+      --accent:    #cba6f7;
+      --accent2:   #89b4fa;
+      --green:     #a6e3a1;
+      --yellow:    #f9e2af;
+      --red:       #f38ba8;
+      --fg:        #cdd6f4;
+      --fg-dim:    #6c7086;
+      --border:    #45475a;
+    }
+
+    body { background: var(--bg); color: var(--fg); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+    /* ── Nav ── */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 16px; color: var(--accent); font-weight: 700; }
+    header a  { color: var(--fg-dim); font-size: 12px; text-decoration: none; }
+    header a:hover { color: var(--fg); }
+    .nav-sep { color: var(--border); }
+
+    /* ── Layout ── */
+    main {
+      max-width: 1400px; margin: 0 auto; padding: 20px 24px;
+      display: grid; grid-template-columns: 320px 1fr; gap: 20px;
+      align-items: start;
+    }
+
+    /* ── Card ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    .card:last-child { margin-bottom: 0; }
+    .card-title { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; font-weight: 600; }
+
+    /* ── Inputs ── */
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+    .field input, .field select {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 7px 10px; color: var(--fg); font-size: 13px;
+    }
+    .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+    .field input::placeholder { color: var(--fg-dim); }
+    .field input[type="number"] { width: 100%; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+    /* ── Buttons ── */
+    .btn {
+      background: var(--accent); color: #1e1e2e;
+      border: none; border-radius: 6px; padding: 8px 16px;
+      font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
+      transition: filter .15s;
+    }
+    .btn:hover { filter: brightness(1.1); }
+    .btn:disabled { background: var(--border); color: var(--fg-dim); cursor: not-allowed; filter: none; }
+    .btn.secondary { background: var(--surface2); color: var(--fg); border: 1px solid var(--border); }
+    .btn.secondary:hover { background: var(--surface3); filter: none; }
+    .btn-full { width: 100%; margin-top: 4px; padding: 10px; font-size: 14px; }
+
+    /* ── Item search autocomplete ── */
+    .item-search-wrap { position: relative; }
+    .item-search-wrap input { width: 100%; }
+    .item-dropdown {
+      display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      margin-top: 2px; max-height: 220px; overflow-y: auto;
+    }
+    .item-dropdown.open { display: block; }
+    .item-opt {
+      padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--surface);
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    }
+    .item-opt:last-child { border-bottom: none; }
+    .item-opt:hover { background: var(--surface3); }
+    .item-opt .io-name { font-size: 13px; }
+    .item-opt .io-id   { font-size: 11px; color: var(--fg-dim); }
+    .item-none { padding: 10px 12px; font-size: 12px; color: var(--fg-dim); text-align: center; }
+
+    /* ── Status line under player load ── */
+    .search-status { font-size: 11px; color: var(--fg-dim); margin-top: 5px; min-height: 16px; }
+
+    /* ── Right panel ── */
+    .results-col { min-width: 0; }
+    .results-empty {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 48px 24px; text-align: center; color: var(--fg-dim);
+    }
+    .results-empty .big-icon { font-size: 36px; margin-bottom: 10px; }
+
+    /* ── Method cards ── */
+    .method-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px; margin-bottom: 14px;
+    }
+    .method-card.best { border-color: var(--green); }
+    .method-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 10px; margin-bottom: 12px;
+    }
+    .method-title { font-size: 14px; font-weight: 700; color: var(--fg); line-height: 1.3; }
+    .method-node  { font-size: 11px; color: var(--fg-dim); margin-top: 2px; }
+    .best-badge {
+      background: #1e3a2a; color: var(--green); border: 1px solid var(--green);
+      border-radius: 12px; padding: 2px 10px; font-size: 11px; font-weight: 700; white-space: nowrap;
+    }
+
+    /* ── Big metrics row ── */
+    .metrics-row { display: flex; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+    .metric-box {
+      background: var(--surface2); border-radius: 6px; padding: 10px 16px;
+      text-align: center; min-width: 90px; flex: 1;
+    }
+    .metric-val   { font-size: 22px; font-weight: 700; color: var(--accent2); line-height: 1.1; }
+    .metric-label { font-size: 10px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
+
+    /* ── Steps table ── */
+    .steps-table { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .steps-table th { background: var(--surface2); color: var(--fg-dim); padding: 6px 10px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+    .steps-table td { padding: 7px 10px; border-top: 1px solid var(--border); }
+    .steps-table tr:last-child td { background: var(--surface2); font-weight: 600; }
+    .num { text-align: right; }
+
+    /* ── Summary comparison table ── */
+    .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    .summary-title { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+    .summary-table { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .summary-table th { background: var(--surface2); color: var(--fg-dim); padding: 7px 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+    .summary-table td { padding: 7px 12px; border-top: 1px solid var(--border); }
+    .summary-table tr.best-row td { color: var(--green); }
+    .summary-table tr.best-row td:first-child { font-weight: 700; }
+
+    /* ── Error / loading ── */
+    .error-box { background: #3a1a1a; border: 1px solid var(--red); border-radius: 8px; padding: 14px 18px; color: var(--red); margin-bottom: 14px; }
+    .spinner-wrap { display: flex; align-items: center; gap: 10px; padding: 32px; color: var(--fg-dim); justify-content: center; }
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: var(--surface); } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⛓ Chain Calculator</h1>
+  <span class="nav-sep">|</span>
+  <a href="/">← Market Advisor</a>
+  <span class="nav-sep">|</span>
+  <a href="/equipment_sim.html">⚙ Equipment Simulator</a>
+</header>
+
+<main>
+
+  <!-- ── Left Column ── -->
+  <div class="left-col">
+
+    <!-- Item Search -->
+    <div class="card">
+      <div class="card-title">Item</div>
+      <div class="field">
+        <label>Search Item</label>
+        <div class="item-search-wrap">
+          <input type="text" id="item-input" placeholder="Type item name…" autocomplete="off" spellcheck="false" oninput="onItemInput()" />
+          <div class="item-dropdown" id="item-dropdown"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Quantity</label>
+        <input type="number" id="quantity" value="100" min="1" step="1" />
+      </div>
+    </div>
+
+    <!-- Player Autofill -->
+    <div class="card">
+      <div class="card-title">Player Autofill (optional)</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="player-input" placeholder="Player name…" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--fg);font-size:13px;" />
+        <button class="btn secondary" onclick="autofillPlayer()">Load</button>
+      </div>
+      <div class="search-status" id="search-status"></div>
+    </div>
+
+    <!-- Tool Powers -->
+    <div class="card">
+      <div class="card-title">Tool Powers</div>
+      <div class="three-col" style="margin-bottom:12px">
+        <div class="field" style="margin:0">
+          <label>Rod Power</label>
+          <input type="number" id="rod-power" value="1" min="1" max="20" step="1" />
+        </div>
+        <div class="field" style="margin:0">
+          <label>Pick Power</label>
+          <input type="number" id="pick-power" value="1" min="1" max="20" step="1" />
+        </div>
+        <div class="field" style="margin:0">
+          <label>Axe Power</label>
+          <input type="number" id="axe-power" value="1" min="1" max="20" step="1" />
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:0">
+        <label>Gather Speed Bonus (%)</label>
+        <input type="number" id="gather-speed" value="0" min="-50" max="200" step="1" title="e.g. 5 for +5% speed" />
+      </div>
+    </div>
+
+    <!-- Calculate -->
+    <button class="btn btn-full" id="calc-btn" onclick="calculate()">Calculate Chain</button>
+
+  </div><!-- /left-col -->
+
+  <!-- ── Right Column ── -->
+  <div class="results-col" id="results-col">
+    <div class="results-empty" id="results-empty">
+      <div class="big-icon">⛓</div>
+      <div>Select an item and click <strong>Calculate Chain</strong></div>
+      <div style="font-size:12px;margin-top:6px;color:var(--fg-dim)">Shows all extraction and cargo-chain routes with stamina and time breakdowns.</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let selectedItemId   = null;
+let selectedItemName = '';
+let itemSearchTimer  = null;
+
+// ── Item Search ──────────────────────────────────────────────────────────────
+function onItemInput() {
+  const q = document.getElementById('item-input').value.trim();
+  clearTimeout(itemSearchTimer);
+  if (q.length < 2) { closeItemDropdown(); return; }
+  itemSearchTimer = setTimeout(() => fetchItemSuggestions(q), 400);
+}
+
+async function fetchItemSuggestions(q) {
+  const dd = document.getElementById('item-dropdown');
+  dd.innerHTML = '<div class="item-none">Searching…</div>';
+  dd.classList.add('open');
+  try {
+    const res = await fetch(`https://bitjita.com/api/items?q=${encodeURIComponent(q)}&limit=8`);
+    const data = await res.json();
+    const items = data.items || data || [];
+    renderItemDropdown(items);
+  } catch (e) {
+    dd.innerHTML = '<div class="item-none">Search failed</div>';
+  }
+}
+
+function renderItemDropdown(items) {
+  const dd = document.getElementById('item-dropdown');
+  if (!items.length) {
+    dd.innerHTML = '<div class="item-none">No items found</div>';
+    return;
+  }
+  dd.innerHTML = items.map(it => {
+    const id   = it.entityId || it.id || it.item_id || '';
+    const name = it.name || it.displayName || id;
+    return `<div class="item-opt" onclick="selectItem('${id}', ${JSON.stringify(name)})">
+      <span class="io-name">${escHtml(name)}</span>
+      <span class="io-id">${id}</span>
+    </div>`;
+  }).join('');
+  dd.classList.add('open');
+}
+
+function selectItem(id, name) {
+  selectedItemId   = id;
+  selectedItemName = name;
+  document.getElementById('item-input').value = name;
+  closeItemDropdown();
+}
+
+function closeItemDropdown() {
+  document.getElementById('item-dropdown').classList.remove('open');
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.item-search-wrap')) closeItemDropdown();
+});
+
+// ── Player Autofill ──────────────────────────────────────────────────────────
+async function autofillPlayer() {
+  const username = document.getElementById('player-input').value.trim();
+  if (!username) return;
+  const status = document.getElementById('search-status');
+  status.textContent = 'Searching…';
+
+  try {
+    const res  = await fetch(`/api/search?q=${encodeURIComponent(username)}`);
+    const data = await res.json();
+    const players = data.players || [];
+    if (!players.length) { status.textContent = 'Player not found.'; return; }
+
+    const player = players.find(p => p.username?.toLowerCase() === username.toLowerCase()) || players[0];
+    const pid = player.entityId;
+
+    const invRes  = await fetch(`/api/inventories?player_id=${pid}`);
+    const invData = await invRes.json();
+    applyToolbelt(invData);
+    status.textContent = `Loaded: ${player.username}`;
+  } catch (e) {
+    status.textContent = `Error: ${e.message}`;
+  }
+}
+
+function applyToolbelt(data) {
+  const items = data.items || {};
+  const inventories = data.inventories || [];
+
+  // Tool type -> power mapping
+  const toolMap = { 10: null, 4: null, 1: null };
+
+  for (const bag of inventories) {
+    if (bag.inventoryName?.toLowerCase() !== 'toolbelt') continue;
+    for (const pocket of (bag.pockets || [])) {
+      const c = pocket.contents;
+      if (!c) continue;
+      const info = items[String(c.itemId)] || {};
+      const tt   = info.toolType;
+      const lv   = info.toolLevel;
+      const pw   = info.toolPower || 0;
+      if (tt == null || lv == null) continue;
+      if (toolMap[tt] === null || lv > (toolMap[tt]?.level || 0)) {
+        toolMap[tt] = { level: lv, power: pw };
+      }
+    }
+  }
+
+  if (toolMap[10]) document.getElementById('rod-power').value  = toolMap[10].power || 1;
+  if (toolMap[4])  document.getElementById('pick-power').value = toolMap[4].power  || 1;
+  if (toolMap[1])  document.getElementById('axe-power').value  = toolMap[1].power  || 1;
+
+  // Gather speed: look at equipment for buffs — show what we set
+  const status = document.getElementById('search-status');
+  const parts = [];
+  if (toolMap[10]) parts.push(`Rod power: ${toolMap[10].power}`);
+  if (toolMap[4])  parts.push(`Pick power: ${toolMap[4].power}`);
+  if (toolMap[1])  parts.push(`Axe power: ${toolMap[1].power}`);
+  if (parts.length) status.textContent = parts.join(' · ');
+}
+
+// ── Calculate ────────────────────────────────────────────────────────────────
+async function calculate() {
+  if (!selectedItemId) {
+    showError('Please select an item first.');
+    return;
+  }
+
+  const quantity    = parseFloat(document.getElementById('quantity').value) || 100;
+  const rodPower    = parseFloat(document.getElementById('rod-power').value)  || 1;
+  const pickPower   = parseFloat(document.getElementById('pick-power').value) || 1;
+  const axePower    = parseFloat(document.getElementById('axe-power').value)  || 1;
+  const speedPct    = parseFloat(document.getElementById('gather-speed').value) || 0;
+  const gatherSpeed = 1.0 + speedPct / 100;
+
+  const url = `/api/chain_calc?item_id=${encodeURIComponent(selectedItemId)}`
+    + `&quantity=${quantity}`
+    + `&rod_power=${rodPower}`
+    + `&pick_power=${pickPower}`
+    + `&axe_power=${axePower}`
+    + `&gather_speed=${gatherSpeed}`;
+
+  showLoading();
+
+  try {
+    const res  = await fetch(url);
+    const data = await res.json();
+    renderResults(data);
+  } catch (e) {
+    showError(`Network error: ${e.message}`);
+  }
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function renderResults(data) {
+  const col = document.getElementById('results-col');
+
+  if (data.error && !data.methods?.length) {
+    col.innerHTML = `<div class="error-box">${escHtml(data.error)}</div>`;
+    return;
+  }
+
+  const methods = data.methods || [];
+  if (!methods.length) {
+    col.innerHTML = `<div class="results-empty"><div class="big-icon">⛓</div><div>No chain methods found for <strong>${escHtml(data.item_name)}</strong>.</div></div>`;
+    return;
+  }
+
+  // Find best (lowest total stamina)
+  const bestIdx = methods.reduce((bi, m, i) => m.total_stamina < methods[bi].total_stamina ? i : bi, 0);
+
+  let html = '';
+
+  // Method cards
+  methods.forEach((m, idx) => {
+    const isBest = idx === bestIdx;
+    html += `<div class="method-card${isBest ? ' best' : ''}">`;
+    html += `<div class="method-header">
+      <div>
+        <div class="method-title">${escHtml(m.method_name)}</div>
+        <div class="method-node">${escHtml(m.node_label)}</div>
+      </div>
+      ${isBest ? '<div class="best-badge">Most Efficient</div>' : ''}
+    </div>`;
+
+    // Big metrics
+    html += `<div class="metrics-row">
+      <div class="metric-box">
+        <div class="metric-val">${fmt(m.total_stamina, 1)}</div>
+        <div class="metric-label">Stamina</div>
+      </div>
+      <div class="metric-box">
+        <div class="metric-val">${fmtTime(m.total_time_seconds)}</div>
+        <div class="metric-label">Time</div>
+      </div>`;
+
+    if (m.total_casts > 0) {
+      html += `<div class="metric-box">
+        <div class="metric-val">${fmt(m.total_casts, 0)}</div>
+        <div class="metric-label">Casts</div>
+      </div>`;
+    }
+    if (m.total_actions > 0) {
+      html += `<div class="metric-box">
+        <div class="metric-val">${fmt(m.total_actions, 0)}</div>
+        <div class="metric-label">Actions</div>
+      </div>`;
+    }
+    if (m.items_per_full_node != null) {
+      html += `<div class="metric-box">
+        <div class="metric-val">${fmt(m.items_per_full_node, 1)}</div>
+        <div class="metric-label">Per Node</div>
+      </div>`;
+    }
+    html += `</div>`; // /metrics-row
+
+    // Steps table
+    html += `<table class="steps-table">
+      <thead><tr>
+        <th>Step</th>
+        <th class="num">Casts / Actions</th>
+        <th class="num">Stamina</th>
+        <th class="num">Time</th>
+      </tr></thead>
+      <tbody>`;
+
+    for (const step of m.steps) {
+      const castAct = step.type === 'extract' || step.type === 'fish'
+        ? `${fmt(step.casts, 0)} casts`
+        : `${fmt(step.actions, 0)} actions`;
+      html += `<tr>
+        <td>${escHtml(step.label)}</td>
+        <td class="num">${castAct}</td>
+        <td class="num">${fmt(step.stamina, 1)}</td>
+        <td class="num">${fmtTime(step.time_sec)}</td>
+      </tr>`;
+    }
+
+    // Totals row
+    html += `<tr>
+      <td><strong>Total</strong></td>
+      <td class="num"></td>
+      <td class="num"><strong>${fmt(m.total_stamina, 1)}</strong></td>
+      <td class="num"><strong>${fmtTime(m.total_time_seconds)}</strong></td>
+    </tr>`;
+
+    html += `</tbody></table>`;
+    html += `</div>`; // /method-card
+  });
+
+  // Summary comparison table
+  if (methods.length > 1) {
+    const qty = data.quantity || 1;
+    html += `<div class="summary-card">
+      <div class="summary-title">Efficiency Comparison (per unit)</div>
+      <table class="summary-table">
+        <thead><tr>
+          <th>Method</th>
+          <th class="num">Stamina / unit</th>
+          <th class="num">Time / unit</th>
+          <th class="num">Full Node Yield</th>
+        </tr></thead>
+        <tbody>`;
+
+    methods.forEach((m, idx) => {
+      const isBest = idx === bestIdx;
+      const stampUnit = m.total_stamina / qty;
+      const timeUnit  = m.total_time_seconds / qty;
+      const nodeYield = m.items_per_full_node != null ? fmt(m.items_per_full_node, 1) : '—';
+      html += `<tr class="${isBest ? 'best-row' : ''}">
+        <td>${escHtml(m.node_label)}${isBest ? ' ★' : ''}</td>
+        <td class="num">${fmt(stampUnit, 3)}</td>
+        <td class="num">${fmtTime(timeUnit)}</td>
+        <td class="num">${nodeYield}</td>
+      </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+  }
+
+  col.innerHTML = html;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function showLoading() {
+  document.getElementById('results-col').innerHTML =
+    '<div class="spinner-wrap"><div class="spinner"></div> Calculating…</div>';
+}
+
+function showError(msg) {
+  document.getElementById('results-col').innerHTML =
+    `<div class="error-box">${escHtml(msg)}</div>`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmt(n, dp) {
+  if (n == null || isNaN(n)) return '—';
+  if (dp === 0) return Math.round(n).toLocaleString();
+  return n.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
+}
+
+function fmtTime(sec) {
+  if (sec == null || isNaN(sec)) return '—';
+  if (sec < 1) return `${(sec * 1000).toFixed(0)} ms`;
+  if (sec < 60) return `${sec.toFixed(1)} s`;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  if (m < 60) return `${m}m ${s}s`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return `${h}h ${rm}m`;
+}
+</script>
+
+</body>
+</html>
