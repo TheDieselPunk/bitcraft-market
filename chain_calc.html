@@ -54,9 +54,21 @@
     .field input::placeholder { color: var(--fg-dim); }
     .field input[type="number"] { width: 100%; }
 
-    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .two-col   { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+    /* ── Argent ring checkboxes ── */
+    .ring-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; margin-top: 6px; }
+    .ring-check {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 12px; color: var(--fg); cursor: pointer;
+      padding: 3px 4px; border-radius: 4px;
+      white-space: nowrap; overflow: hidden;
+    }
+    .ring-check:hover { background: var(--surface2); }
+    .ring-check input[type=checkbox] { accent-color: var(--accent); flex-shrink: 0; cursor: pointer; }
+    .ring-check.ring-inactive { opacity: 0.4; }
+    .ring-subtitle { font-size: 11px; color: var(--fg-dim); margin-bottom: 4px; }
 
     /* ── Buttons ── */
     .btn {
@@ -225,6 +237,13 @@
       </div>
     </div>
 
+    <!-- Argent Rings -->
+    <div class="card">
+      <div class="card-title">Argent Rings</div>
+      <div class="ring-subtitle">+15% effective power when equipped (30% chance × 1.5×)</div>
+      <div class="ring-grid" id="ring-grid"></div>
+    </div>
+
     <!-- Calculate -->
     <button class="btn btn-full" id="calc-btn" onclick="calculate()">Calculate Chain</button>
 
@@ -242,6 +261,41 @@
 </main>
 
 <script>
+// ── Argent Rings ──────────────────────────────────────────────────────────────
+// toolParam: which tool power this ring's crit applies to (null = not in current chains)
+const CRIT_MULT = 1 + 0.3 * 0.5;  // 0.7×1.0 + 0.3×1.5 = 1.15 expected power multiplier
+
+const RINGS = [
+  { id: '1598355237', label: "Fisher's",        toolParam: 'rod'  },
+  { id: '1576333470', label: "Miner's",          toolParam: 'pick' },
+  { id: '49775758',   label: "Forester's",       toolParam: 'axe'  },
+  { id: '765471747',  label: "Smith's",          toolParam: null   },
+  { id: '799730992',  label: "Carpenter's",      toolParam: null   },
+  { id: '991210407',  label: "Tailor's",         toolParam: null   },
+  { id: '1567406362', label: "Farmer's",         toolParam: null   },
+  { id: '1686646239', label: "Leatherworker's",  toolParam: null   },
+  { id: '1872241174', label: "Hunter's",         toolParam: null   },
+  { id: '213597211',  label: "Forager's",        toolParam: null   },
+  { id: '319478789',  label: "Mason's",          toolParam: null   },
+  { id: '1928102640', label: "Scholar's",        toolParam: null   },
+];
+
+function initRings() {
+  const grid = document.getElementById('ring-grid');
+  grid.innerHTML = RINGS.map(r => `
+    <label class="ring-check${r.toolParam ? '' : ' ring-inactive'}"
+           title="${r.label} Argent Ring${r.toolParam ? ' (+15% ' + r.toolParam + ' power)' : ' (not used in current chains)'}">
+      <input type="checkbox" id="ring-${r.id}">
+      ${r.label}
+    </label>`).join('');
+}
+
+function ringMultiplier(toolParam) {
+  const ring = RINGS.find(r => r.toolParam === toolParam);
+  if (!ring) return 1.0;
+  return document.getElementById(`ring-${ring.id}`)?.checked ? CRIT_MULT : 1.0;
+}
+
 // ── State ────────────────────────────────────────────────────────────────────
 let selectedItemId   = null;
 let selectedItemName = '';
@@ -358,12 +412,31 @@ function applyToolbelt(data) {
   if (toolMap[4])  document.getElementById('pick-power').value = toolMap[4].power  || 1;
   if (toolMap[1])  document.getElementById('axe-power').value  = toolMap[1].power  || 1;
 
-  // Gather speed: look at equipment for buffs — show what we set
+  // ── Argent ring autofill ──────────────────────────────────────────────────
+  // Collect all item IDs the player owns (inventory bags)
+  const ownedIds = new Set(Object.keys(items));
+  // Also include worn equipment items (matched by name)
+  const wornNames = new Set(
+    (data.equipment || []).map(e => (e.item?.name || e.name || '').toLowerCase())
+  );
+
+  // Uncheck all first, then check what's owned
+  for (const ring of RINGS) {
+    const cb = document.getElementById(`ring-${ring.id}`);
+    if (!cb) continue;
+    const ownedInBag      = ownedIds.has(ring.id);
+    const wornName        = `${ring.label.toLowerCase()} argent ring`;
+    const ownedWorn       = wornNames.has(wornName);
+    cb.checked = ownedInBag || ownedWorn;
+  }
+
   const status = document.getElementById('search-status');
   const parts = [];
-  if (toolMap[10]) parts.push(`Rod power: ${toolMap[10].power}`);
-  if (toolMap[4])  parts.push(`Pick power: ${toolMap[4].power}`);
-  if (toolMap[1])  parts.push(`Axe power: ${toolMap[1].power}`);
+  if (toolMap[10]) parts.push(`Rod ×${toolMap[10].power}`);
+  if (toolMap[4])  parts.push(`Pick ×${toolMap[4].power}`);
+  if (toolMap[1])  parts.push(`Axe ×${toolMap[1].power}`);
+  const checkedRings = RINGS.filter(r => document.getElementById(`ring-${r.id}`)?.checked);
+  if (checkedRings.length) parts.push(`Rings: ${checkedRings.map(r => r.label).join(', ')}`);
   if (parts.length) status.textContent = parts.join(' · ');
 }
 
@@ -375,9 +448,9 @@ async function calculate() {
   }
 
   const quantity    = parseFloat(document.getElementById('quantity').value) || 100;
-  const rodPower    = parseFloat(document.getElementById('rod-power').value)  || 1;
-  const pickPower   = parseFloat(document.getElementById('pick-power').value) || 1;
-  const axePower    = parseFloat(document.getElementById('axe-power').value)  || 1;
+  const rodPower    = (parseFloat(document.getElementById('rod-power').value)  || 1) * ringMultiplier('rod');
+  const pickPower   = (parseFloat(document.getElementById('pick-power').value) || 1) * ringMultiplier('pick');
+  const axePower    = (parseFloat(document.getElementById('axe-power').value)  || 1) * ringMultiplier('axe');
   const speedPct    = parseFloat(document.getElementById('gather-speed').value) || 0;
   const craftPct    = parseFloat(document.getElementById('craft-speed').value)  || 0;
   const gatherSpeed = 1.0 + speedPct / 100;
@@ -598,6 +671,9 @@ function fmtTime(sec) {
   const rm = m % 60;
   return `${h}h ${rm}m`;
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+initRings();
 </script>
 
 </body>
