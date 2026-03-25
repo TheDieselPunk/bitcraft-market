@@ -55,6 +55,7 @@
     .field input[type="number"] { width: 100%; }
 
     .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .two-col   { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 
     /* ── Buttons ── */
@@ -212,9 +213,15 @@
           <input type="number" id="axe-power" value="1" min="1" max="20" step="1" />
         </div>
       </div>
-      <div class="field" style="margin-bottom:0">
-        <label>Gather Speed Bonus (%)</label>
-        <input type="number" id="gather-speed" value="0" min="-50" max="200" step="1" title="e.g. 5 for +5% speed" />
+      <div class="two-col" style="gap:8px;margin-bottom:0">
+        <div class="field" style="margin:0">
+          <label>Gather Speed Bonus (%)</label>
+          <input type="number" id="gather-speed" value="0" min="-50" max="200" step="1" title="Fishing / extraction speed bonus" />
+        </div>
+        <div class="field" style="margin:0">
+          <label>Craft Speed Bonus (%)</label>
+          <input type="number" id="craft-speed" value="0" min="-50" max="200" step="1" title="Crafting / processing speed bonus" />
+        </div>
       </div>
     </div>
 
@@ -372,14 +379,17 @@ async function calculate() {
   const pickPower   = parseFloat(document.getElementById('pick-power').value) || 1;
   const axePower    = parseFloat(document.getElementById('axe-power').value)  || 1;
   const speedPct    = parseFloat(document.getElementById('gather-speed').value) || 0;
+  const craftPct    = parseFloat(document.getElementById('craft-speed').value)  || 0;
   const gatherSpeed = 1.0 + speedPct / 100;
+  const craftSpeed  = 1.0 + craftPct / 100;
 
   const url = `/api/chain_calc?item_id=${encodeURIComponent(selectedItemId)}`
     + `&quantity=${quantity}`
     + `&rod_power=${rodPower}`
     + `&pick_power=${pickPower}`
     + `&axe_power=${axePower}`
-    + `&gather_speed=${gatherSpeed}`;
+    + `&gather_speed=${gatherSpeed}`
+    + `&craft_speed=${craftSpeed}`;
 
   showLoading();
 

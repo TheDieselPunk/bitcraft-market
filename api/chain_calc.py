@@ -1,8 +1,11 @@
 """
-GET /api/chain_calc?item_id=X&quantity=Y&rod_power=Z&gather_speed=W&pick_power=A&axe_power=B
+GET /api/chain_calc?item_id=X&quantity=Y&rod_power=Z&gather_speed=W&craft_speed=V&pick_power=A&axe_power=B
 
 Returns all extraction/cargo-chain methods for producing a given item, with
 stamina, time and cast/action breakdowns per method.
+
+gather_speed  multiplier applied to fishing/extraction time (e.g. 1.05 = +5%)
+craft_speed   multiplier applied to crafting/processing time (separate stat)
 """
 
 import json
@@ -59,7 +62,7 @@ def _tool_power(tool_reqs, tool_powers):
 
 
 def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
-                      tool_powers, gather_speed, game_data, recipes):
+                      tool_powers, gather_speed, craft_speed, game_data, recipes):
     """
     Compute the extra cost of producing bait consumed during total_fish_casts casts.
     Uses the first small-fish→bait recipe found in item_chain_by_item that has
@@ -86,7 +89,7 @@ def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
         craft_runs     = bait_needed / bait_per_run
         craft_actions  = craft_runs * bait_recipe['actions_required']
         craft_stamina  = craft_actions * bait_recipe.get('stamina_per_action', 0.0)
-        craft_time     = craft_actions * bait_recipe.get('time_per_action', 1.6) / gather_speed
+        craft_time     = craft_actions * bait_recipe.get('time_per_action', 1.6) / craft_speed
 
         for fe in ebi.get(bait_fish_id, []):
             power         = _tool_power(fe.get('tool_requirements', []), tool_powers)
@@ -125,7 +128,7 @@ def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
 
 
 def compute_chum_cost(tier, total_ocean_casts, time_per_cast,
-                      tool_powers, gather_speed, game_data, recipes):
+                      tool_powers, gather_speed, craft_speed, game_data, recipes):
     """
     Compute the extra cost of producing chum for total_ocean_casts ocean casts.
     Each chum lasts CHUM_DURATION_SECS seconds of fishing.
@@ -154,7 +157,7 @@ def compute_chum_cost(tier, total_ocean_casts, time_per_cast,
 
         craft_actions   = craft_runs * chum_recipe['actions_required']
         craft_stamina   = craft_actions * chum_recipe.get('stamina_per_action', 0.0)
-        craft_time      = craft_actions * chum_recipe.get('time_per_action', 1.6) / gather_speed
+        craft_time      = craft_actions * chum_recipe.get('time_per_action', 1.6) / craft_speed
 
         # External ingredients (raw meat etc.)
         external = [
@@ -194,7 +197,7 @@ def compute_chum_cost(tier, total_ocean_casts, time_per_cast,
             for b in fe.get('consumed', []):
                 b_steps, b_stam, b_time = compute_bait_cost(
                     b['item_id'], b['consumption_chance'], fish_casts,
-                    tool_powers, gather_speed, game_data, recipes
+                    tool_powers, gather_speed, craft_speed, game_data, recipes
                 )
                 extra_steps   = b_steps + extra_steps   # bait steps come first
                 extra_stamina += b_stam
@@ -216,7 +219,7 @@ def compute_chum_cost(tier, total_ocean_casts, time_per_cast,
     return [], 0.0, 0.0, []
 
 
-def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data, recipes):
+def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_speed, game_data, recipes):
     """
     Return a list of method dicts for producing `quantity` of `item_id`.
 
@@ -288,7 +291,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
         fish_needed = quantity / oil_per_fish
         proc_actions = fish_needed * ce['actions_required']
         proc_stamina = proc_actions * ce.get('stamina_per_action', 0.75)
-        proc_time    = proc_actions * ce.get('time_per_action', 1.6)
+        proc_time    = proc_actions * ce.get('time_per_action', 1.6) / craft_speed
         cargo_name   = ce.get('cargo_input_name', item_name(fish_id, recipes))
 
         # Cargo source may be in extraction_by_item (wrapper-resolved) OR cargo_extraction (direct)
@@ -325,7 +328,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
                 tier = int(tier_match.group(1))
                 chum_steps, chum_stamina, chum_time, chum_external = compute_chum_cost(
                     tier, total_fish_casts, fe['time_per_cast'],
-                    tool_powers, gather_speed, game_data, recipes
+                    tool_powers, gather_speed, craft_speed, game_data, recipes
                 )
 
             total_stamina = fish_stamina + proc_stamina + chum_stamina
@@ -376,7 +379,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
         fish_needed = quantity / oil_per_fish
         proc_actions = fish_needed * ic['actions_required']
         proc_stamina = proc_actions * ic.get('stamina_per_action', 0.0)
-        proc_time    = proc_actions * ic.get('time_per_action', 1.6)
+        proc_time    = proc_actions * ic.get('time_per_action', 1.6) / craft_speed
         input_name   = ic.get('input_item_name', item_name(input_id, recipes))
 
         for fe in ebi.get(input_id, []):
@@ -405,7 +408,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
             for b in fe.get('consumed', []):
                 bs, bstam, btime = compute_bait_cost(
                     b['item_id'], b['consumption_chance'], total_fish_casts,
-                    tool_powers, gather_speed, game_data, recipes
+                    tool_powers, gather_speed, craft_speed, game_data, recipes
                 )
                 bait_steps  += bs
                 bait_stamina += bstam
@@ -496,8 +499,11 @@ class handler(BaseHTTPRequestHandler):
             pick_power  = float(_p('pick_power', '1'))
             axe_power   = float(_p('axe_power', '1'))
             gather_speed = float(_p('gather_speed', '1.0'))
+            craft_speed  = float(_p('craft_speed',  '1.0'))
             if gather_speed <= 0:
                 gather_speed = 1.0
+            if craft_speed <= 0:
+                craft_speed = 1.0
             if quantity <= 0:
                 quantity = 1.0
         except ValueError as exc:
@@ -521,7 +527,7 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             methods = resolve_all_methods(
-                item_id_raw, quantity, tool_powers, gather_speed, game_data, recipes
+                item_id_raw, quantity, tool_powers, gather_speed, craft_speed, game_data, recipes
             )
         except Exception as exc:
             self._send(500, {'error': f'Calculation error: {exc}'})
