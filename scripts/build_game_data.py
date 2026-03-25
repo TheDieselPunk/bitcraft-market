@@ -272,6 +272,86 @@ def build_cargo_by_item(crafting_list, cargo_extraction, extraction_by_item,
     return by_item
 
 
+def build_item_chain_by_item(crafting_list, extraction_by_item, item_list_by_id, item_by_id):
+    """
+    Build {output_item_id_str -> [{input_item_id, input_item_name, output_quantity, ...}]}
+
+    For crafting recipes where the consumed input is an Item type that is
+    world-extractable (in extraction_by_item), e.g. lake fish → process → oil/filet.
+    Output wrappers (item_list_id != 0) are resolved and quantities aggregated.
+    """
+    by_item = {}
+
+    for r in crafting_list:
+        item_inputs = [
+            i for i in r.get('consumed_item_stacks', [])
+            if i.get('item_type') == 'Item'
+               and str(i.get('item_id', '')) in extraction_by_item
+        ]
+        if not item_inputs:
+            continue
+
+        crafted_outputs = [
+            o for o in r.get('crafted_item_stacks', [])
+            if o.get('item_type') == 'Item'
+        ]
+        if not crafted_outputs:
+            continue
+
+        for item_input in item_inputs:
+            input_id = str(item_input.get('item_id', ''))
+            input_name = item_by_id.get(item_input.get('item_id', 0), {}).get('name', input_id)
+
+            entry_base = {
+                'recipe_name':        r.get('name', ''),
+                'stamina_per_action': r.get('stamina_requirement', 0.0),
+                'time_per_action':    r.get('time_requirement', 1.6),
+                'actions_required':   r.get('actions_required', 1),
+                'tool_requirements':  r.get('tool_requirements', []),
+                'level_requirements': r.get('level_requirements', []),
+                'input_item_id':      input_id,
+                'input_item_qty':     item_input.get('quantity', 1),
+                'input_item_name':    input_name,
+            }
+
+            for output in crafted_outputs:
+                out_item_id = output.get('item_id', 0)
+                out_qty = output.get('quantity', 1)
+                if not out_item_id:
+                    continue
+
+                out_item_info = item_by_id.get(out_item_id, {})
+                list_id = out_item_info.get('item_list_id', 0)
+
+                if list_id and list_id != 0:
+                    item_list = item_list_by_id.get(list_id)
+                    if item_list:
+                        # Accumulate expected output per actual item across all possibilities
+                        resolved = {}
+                        for possibility in item_list.get('possibilities', []):
+                            poss_prob = possibility.get('probability', 1.0)
+                            for actual in possibility.get('items', []):
+                                actual_id = str(actual.get('item_id', ''))
+                                actual_qty = actual.get('quantity', 1)
+                                if not actual_id:
+                                    continue
+                                resolved[actual_id] = (
+                                    resolved.get(actual_id, 0.0)
+                                    + out_qty * poss_prob * actual_qty
+                                )
+                        for actual_id, total_qty in resolved.items():
+                            entry = dict(entry_base)
+                            entry['output_quantity'] = total_qty
+                            by_item.setdefault(actual_id, []).append(entry)
+                        continue
+                    # fallthrough: list not found, use wrapper key
+                entry = dict(entry_base)
+                entry['output_quantity'] = out_qty
+                by_item.setdefault(str(out_item_id), []).append(entry)
+
+    return by_item
+
+
 def build_resource_max_health(resource_list):
     """Build {resource_id_str -> max_health} mapping."""
     result = {}
@@ -336,9 +416,16 @@ def main():
     )
     print(f'  {len(cargo_by_item)} unique items produced from cargo processing.')
 
+    print('Building item_chain_by_item ...')
+    item_chain_by_item = build_item_chain_by_item(
+        crafting_list, extraction_by_item, item_list_by_id, item_by_id
+    )
+    print(f'  {len(item_chain_by_item)} unique items produced via item processing chains.')
+
     output = {
         'extraction_by_item':  extraction_by_item,
         'cargo_by_item':       cargo_by_item,
+        'item_chain_by_item':  item_chain_by_item,
         'resource_max_health': resource_max_health,
         'cargo_extraction':    cargo_extraction,
         '__meta__': {
@@ -347,6 +434,7 @@ def main():
             'resources':          len(resource_max_health),
             'cargo_types':        len(cargo_extraction),
             'cargo_items':        len(cargo_by_item),
+            'item_chain_items':   len(item_chain_by_item),
         },
     }
 
@@ -357,6 +445,7 @@ def main():
     print(f'Resource nodes          : {len(resource_max_health)}')
     print(f'Cargo extraction types  : {len(cargo_extraction)}')
     print(f'Items via cargo process : {len(cargo_by_item)}')
+    print(f'Items via item chains   : {len(item_chain_by_item)}')
     print(f'Written to {OUT_FILE}')
 
     # Spot-checks

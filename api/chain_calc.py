@@ -59,9 +59,10 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
       items_per_full_node
     """
     methods = []
-    ebi = game_data.get('extraction_by_item', {})
-    cbi = game_data.get('cargo_by_item', {})
-    cex = game_data.get('cargo_extraction', {})
+    ebi  = game_data.get('extraction_by_item', {})
+    cbi  = game_data.get('cargo_by_item', {})
+    cex  = game_data.get('cargo_extraction', {})
+    icbi = game_data.get('item_chain_by_item', {})
     rmh = game_data.get('resource_max_health', {})
 
     sid = str(item_id)
@@ -164,6 +165,71 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
                     {
                         'type':    'process',
                         'label':   f'Process {cargo_name} → {item_name(item_id, recipes)}',
+                        'actions': proc_actions,
+                        'stamina': proc_stamina,
+                        'time_sec': proc_time,
+                    },
+                ],
+                'total_stamina':       total_stamina,
+                'total_time_seconds':  total_time,
+                'total_casts':         total_fish_casts,
+                'total_actions':       proc_actions,
+                'items_per_full_node': items_per_node,
+            })
+
+    # ── Method C: Item chain (extract item → craft → output) ─────────────────
+    # e.g. lake fish (Item) → process → oil/filet/products
+    for ic in icbi.get(sid, []):
+        input_id = str(ic['input_item_id'])
+        oil_per_fish = ic['output_quantity']
+        if oil_per_fish <= 0:
+            continue
+
+        fish_needed = quantity / oil_per_fish
+        proc_actions = fish_needed * ic['actions_required']
+        proc_stamina = proc_actions * ic.get('stamina_per_action', 0.0)
+        proc_time    = proc_actions * ic.get('time_per_action', 1.6)
+        input_name   = ic.get('input_item_name', item_name(input_id, recipes))
+
+        for fe in ebi.get(input_id, []):
+            f_tool_reqs = fe.get('tool_requirements', [])
+            f_tool_type = f_tool_reqs[0]['tool_type'] if f_tool_reqs else None
+            f_power = tool_powers.get(f_tool_type, 1) if f_tool_type is not None else 1
+
+            f_prob = fe['prob_per_hp'] * f_power
+            if f_prob <= 0:
+                continue
+
+            fish_casts_per_unit = 1.0 / f_prob
+            total_fish_casts = fish_needed * fish_casts_per_unit
+            fish_stamina = total_fish_casts * fe['stamina_per_cast']
+            fish_time    = total_fish_casts * fe['time_per_cast'] / gather_speed
+
+            rid = str(fe['resource_id'])
+            node_health = rmh.get(rid, 0)
+            fish_per_node = float(node_health) * fe['prob_per_hp'] if node_health else None
+            items_per_node = fish_per_node * oil_per_fish if fish_per_node else None
+
+            label = node_label(rid)
+            total_stamina = fish_stamina + proc_stamina
+            total_time    = fish_time + proc_time
+
+            methods.append({
+                'method_name': f'Item chain — {input_name} → {item_name(item_id, recipes)} via {label}',
+                'source_node': rid,
+                'node_label':  label,
+                'fish_name':   input_name,
+                'steps': [
+                    {
+                        'type':    'fish',
+                        'label':   f'Catch {input_name}',
+                        'casts':   total_fish_casts,
+                        'stamina': fish_stamina,
+                        'time_sec': fish_time,
+                    },
+                    {
+                        'type':    'process',
+                        'label':   f'Process {input_name} → {item_name(item_id, recipes)}',
                         'actions': proc_actions,
                         'stamina': proc_stamina,
                         'time_sec': proc_time,
