@@ -85,8 +85,10 @@
     }
     .item-opt:last-child { border-bottom: none; }
     .item-opt:hover { background: var(--surface3); }
-    .item-opt .io-name { font-size: 13px; }
+    .item-opt .io-name { font-size: 13px; flex: 1; }
     .item-opt .io-id   { font-size: 11px; color: var(--fg-dim); }
+    .item-opt .io-chain { font-size: 10px; padding: 1px 5px; border-radius: 3px;
+                          background: var(--green); color: #000; font-weight: 700; }
     .item-none { padding: 10px 12px; font-size: 12px; color: var(--fg-dim); text-align: center; }
 
     /* ── Status line under player load ── */
@@ -251,9 +253,9 @@ async function fetchItemSuggestions(q) {
   dd.innerHTML = '<div class="item-none">Searching…</div>';
   dd.classList.add('open');
   try {
-    const res = await fetch(`https://bitjita.com/api/items?q=${encodeURIComponent(q)}&limit=8`);
+    const res = await fetch(`/api/chain_calc?q=${encodeURIComponent(q)}`);
     const data = await res.json();
-    const items = data.items || data || [];
+    const items = data.items || [];
     renderItemDropdown(items);
   } catch (e) {
     dd.innerHTML = '<div class="item-none">Search failed</div>';
@@ -267,10 +269,11 @@ function renderItemDropdown(items) {
     return;
   }
   dd.innerHTML = items.map(it => {
-    const id   = it.entityId || it.id || it.item_id || '';
-    const name = it.name || it.displayName || id;
+    const id   = it.id || '';
+    const name = it.name || id;
+    const badge = it.has_chain ? '<span class="io-chain">chain</span>' : '';
     return `<div class="item-opt" onclick="selectItem('${id}', ${JSON.stringify(name)})">
-      <span class="io-name">${escHtml(name)}</span>
+      <span class="io-name">${escHtml(name)}</span>${badge}
       <span class="io-id">${id}</span>
     </div>`;
   }).join('');

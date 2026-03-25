@@ -187,6 +187,28 @@ class handler(BaseHTTPRequestHandler):
             v = params.get(name, [None])[0]
             return v if v is not None else default
 
+        # Search mode: ?q=<text> returns matching items from local data
+        q = _p('q', '')
+        if q:
+            game_data = load_game_data()
+            recipes   = load_recipes_cache()
+            q_lo = q.lower()
+            # Build a set of item IDs that have known chains
+            known_ids = (set(game_data.get('extraction_by_item', {}).keys()) |
+                         set(game_data.get('cargo_by_item', {}).keys()))
+            results = []
+            seen = set()
+            for iid, r in recipes.items():
+                name = r.get('name', '')
+                if q_lo in name.lower() and iid not in seen:
+                    seen.add(iid)
+                    has_chain = iid in known_ids
+                    results.append({'id': iid, 'name': name,
+                                    'tier': r.get('tier'), 'has_chain': has_chain})
+            results.sort(key=lambda x: (not x['has_chain'], x['name'].lower()))
+            self._send(200, {'items': results[:20]})
+            return
+
         item_id_raw = _p('item_id', '')
         if not item_id_raw:
             self._send(400, {'error': 'item_id parameter is required'})
