@@ -459,6 +459,7 @@ function renderResults(data) {
     html += `<table class="steps-table">
       <thead><tr>
         <th>Step</th>
+        <th class="num">Quantity</th>
         <th class="num">Casts / Actions</th>
         <th class="num">Stamina</th>
         <th class="num">Time</th>
@@ -488,8 +489,12 @@ function renderResults(data) {
 
       const dimRow = (step.type.startsWith('bait_') || step.type.startsWith('chum_')) ? ' style="opacity:0.75"' : '';
       const groupBadge = isNewGroup ? `<span style="font-size:10px;color:var(--fg-dim);display:block;margin-bottom:1px">${group}</span>` : '';
+      const qtyCell = step.qty_out != null
+        ? `<span style="font-weight:600">${fmt(step.qty_out, 0)}</span><span style="font-size:11px;color:var(--fg-dim)"> ${escHtml(step.qty_label || '')}</span>`
+        : '—';
       html += `<tr${dimRow}>
         <td>${groupBadge}${escHtml(step.label)}</td>
+        <td class="num">${qtyCell}</td>
         <td class="num">${castAct}</td>
         <td class="num">${fmt(step.stamina, 1)}</td>
         <td class="num">${fmtTime(step.time_sec)}</td>
@@ -499,6 +504,7 @@ function renderResults(data) {
     // Totals row
     html += `<tr>
       <td><strong>Total</strong></td>
+      <td class="num"></td>
       <td class="num"></td>
       <td class="num"><strong>${fmt(m.total_stamina, 1)}</strong></td>
       <td class="num"><strong>${fmtTime(m.total_time_seconds)}</strong></td>

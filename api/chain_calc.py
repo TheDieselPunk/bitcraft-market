@@ -102,6 +102,8 @@ def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
                     {
                         'type':     'bait_fish',
                         'label':    f'Catch {bait_fish_name} (for bait)',
+                        'qty_out':  craft_runs,           # small fish caught
+                        'qty_label': bait_fish_name,
                         'casts':    fish_casts,
                         'stamina':  fish_stamina,
                         'time_sec': fish_time,
@@ -109,6 +111,8 @@ def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
                     {
                         'type':     'bait_craft',
                         'label':    f'Process {bait_fish_name} → {item_name(bait_id, recipes)}',
+                        'qty_out':  bait_needed,          # bait items produced
+                        'qty_label': item_name(bait_id, recipes),
                         'actions':  craft_actions,
                         'stamina':  craft_stamina,
                         'time_sec': craft_time,
@@ -177,6 +181,8 @@ def compute_chum_cost(tier, total_ocean_casts, time_per_cast,
             extra_steps   += [{
                 'type':     'chum_fish',
                 'label':    f'Catch {lake_fish_name} (for chum)',
+                'qty_out':  lake_fish_needed,   # lake fish caught for chum
+                'qty_label': lake_fish_name,
                 'casts':    fish_casts,
                 'stamina':  fish_stamina,
                 'time_sec': fish_time,
@@ -198,6 +204,8 @@ def compute_chum_cost(tier, total_ocean_casts, time_per_cast,
         extra_steps += [{
             'type':     'chum_craft',
             'label':    f'Craft {item_name(chum_id, recipes)} (chum)',
+            'qty_out':  chum_needed,            # chum items crafted
+            'qty_label': item_name(chum_id, recipes),
             'actions':  craft_actions,
             'stamina':  craft_stamina,
             'time_sec': craft_time,
@@ -255,10 +263,12 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
             'node_label':  label,
             'fish_name':   None,
             'steps': [{
-                'type':    'extract',
-                'label':   f'Extract {iname}',
-                'casts':   total_casts,
-                'stamina': stamina,
+                'type':     'extract',
+                'label':    f'Extract {iname}',
+                'qty_out':  quantity,
+                'qty_label': iname,
+                'casts':    total_casts,
+                'stamina':  stamina,
                 'time_sec': time_sec,
             }],
             'total_stamina':       stamina,
@@ -322,17 +332,22 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
             total_time    = fish_time    + proc_time    + chum_time
 
             fish_step = {
-                'type':    'fish',
-                'label':   f'Catch {cargo_name}',
-                'casts':   total_fish_casts,
-                'stamina': fish_stamina,
+                'type':     'fish',
+                'label':    f'Catch {cargo_name}',
+                'qty_out':  fish_needed,
+                'qty_label': cargo_name,
+                'casts':    total_fish_casts,
+                'stamina':  fish_stamina,
                 'time_sec': fish_time,
             }
+            iname_out = item_name(item_id, recipes)
             proc_step = {
-                'type':    'process',
-                'label':   f'Process {cargo_name} → {item_name(item_id, recipes)}',
-                'actions': proc_actions,
-                'stamina': proc_stamina,
+                'type':     'process',
+                'label':    f'Process {cargo_name} → {iname_out}',
+                'qty_out':  quantity,
+                'qty_label': iname_out,
+                'actions':  proc_actions,
+                'stamina':  proc_stamina,
                 'time_sec': proc_time,
             }
 
@@ -402,13 +417,18 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
             fish_step = {
                 'type':     'fish',
                 'label':    f'Catch {input_name}',
+                'qty_out':  fish_needed,
+                'qty_label': input_name,
                 'casts':    total_fish_casts,
                 'stamina':  fish_stamina,
                 'time_sec': fish_time,
             }
+            iname_out = item_name(item_id, recipes)
             proc_step = {
                 'type':     'process',
-                'label':    f'Process {input_name} → {item_name(item_id, recipes)}',
+                'label':    f'Process {input_name} → {iname_out}',
+                'qty_out':  quantity,
+                'qty_label': iname_out,
                 'actions':  proc_actions,
                 'stamina':  proc_stamina,
                 'time_sec': proc_time,
