@@ -272,11 +272,14 @@ function renderItemDropdown(items) {
     const id   = it.id || '';
     const name = it.name || id;
     const badge = it.has_chain ? '<span class="io-chain">chain</span>' : '';
-    return `<div class="item-opt" onclick="selectItem('${id}', ${JSON.stringify(name)})">
+    return `<div class="item-opt" data-id="${escHtml(id)}" data-name="${escHtml(name)}">
       <span class="io-name">${escHtml(name)}</span>${badge}
       <span class="io-id">${id}</span>
     </div>`;
   }).join('');
+  dd.querySelectorAll('.item-opt').forEach(el => {
+    el.addEventListener('click', () => selectItem(el.dataset.id, el.dataset.name));
+  });
   dd.classList.add('open');
 }
 
@@ -285,6 +288,7 @@ function selectItem(id, name) {
   selectedItemName = name;
   document.getElementById('item-input').value = name;
   closeItemDropdown();
+  calculate();
 }
 
 function closeItemDropdown() {
