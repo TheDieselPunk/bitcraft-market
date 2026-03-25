@@ -87,9 +87,11 @@ def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
         bait_fish_id   = str(bait_recipe['input_item_id'])
         bait_fish_name = bait_recipe.get('input_item_name', bait_fish_id)
         craft_runs     = bait_needed / bait_per_run
-        craft_actions  = craft_runs * bait_recipe['actions_required']
-        craft_stamina  = craft_actions * bait_recipe.get('stamina_per_action', 0.0)
-        craft_time     = craft_actions * bait_recipe.get('time_per_action', 1.6) / craft_speed
+        total_work     = craft_runs * bait_recipe['actions_required']
+        craft_power    = _tool_power(bait_recipe.get('tool_requirements', []), tool_powers)
+        craft_attempts = total_work / craft_power
+        craft_stamina  = craft_attempts * bait_recipe.get('stamina_per_action', 0.0)
+        craft_time     = craft_attempts * bait_recipe.get('time_per_action', 1.6) / craft_speed
 
         for fe in ebi.get(bait_fish_id, []):
             power         = _tool_power(fe.get('tool_requirements', []), tool_powers)
@@ -105,7 +107,7 @@ def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
                     {
                         'type':     'bait_fish',
                         'label':    f'Catch {bait_fish_name} (for bait)',
-                        'qty_out':  craft_runs,           # small fish caught
+                        'qty_out':  craft_runs,
                         'qty_label': bait_fish_name,
                         'casts':    fish_casts,
                         'stamina':  fish_stamina,
@@ -114,9 +116,9 @@ def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
                     {
                         'type':     'bait_craft',
                         'label':    f'Process {bait_fish_name} → {item_name(bait_id, recipes)}',
-                        'qty_out':  bait_needed,          # bait items produced
+                        'qty_out':  bait_needed,
                         'qty_label': item_name(bait_id, recipes),
-                        'actions':  craft_actions,
+                        'actions':  craft_attempts,
                         'stamina':  craft_stamina,
                         'time_sec': craft_time,
                     },
@@ -155,9 +157,11 @@ def compute_chum_cost(tier, total_ocean_casts, time_per_cast,
         craft_runs      = chum_needed / chum_per_run
         lake_fish_needed = craft_runs * lake_fish_qty
 
-        craft_actions   = craft_runs * chum_recipe['actions_required']
-        craft_stamina   = craft_actions * chum_recipe.get('stamina_per_action', 0.0)
-        craft_time      = craft_actions * chum_recipe.get('time_per_action', 1.6) / craft_speed
+        total_work      = craft_runs * chum_recipe['actions_required']
+        craft_power     = _tool_power(chum_recipe.get('tool_requirements', []), tool_powers)
+        craft_attempts  = total_work / craft_power
+        craft_stamina   = craft_attempts * chum_recipe.get('stamina_per_action', 0.0)
+        craft_time      = craft_attempts * chum_recipe.get('time_per_action', 1.6) / craft_speed
 
         # External ingredients (raw meat etc.)
         external = [
@@ -207,9 +211,9 @@ def compute_chum_cost(tier, total_ocean_casts, time_per_cast,
         extra_steps += [{
             'type':     'chum_craft',
             'label':    f'Craft {item_name(chum_id, recipes)} (chum)',
-            'qty_out':  chum_needed,            # chum items crafted
+            'qty_out':  chum_needed,
             'qty_label': item_name(chum_id, recipes),
-            'actions':  craft_actions,
+            'actions':  craft_attempts,
             'stamina':  craft_stamina,
             'time_sec': craft_time,
         }]
@@ -288,11 +292,13 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
         if oil_per_fish <= 0:
             continue
 
-        fish_needed = quantity / oil_per_fish
-        proc_actions = fish_needed * ce['actions_required']
-        proc_stamina = proc_actions * ce.get('stamina_per_action', 0.75)
-        proc_time    = proc_actions * ce.get('time_per_action', 1.6) / craft_speed
-        cargo_name   = ce.get('cargo_input_name', item_name(fish_id, recipes))
+        fish_needed   = quantity / oil_per_fish
+        total_work    = fish_needed * ce['actions_required']
+        proc_power    = _tool_power(ce.get('tool_requirements', []), tool_powers)
+        proc_attempts = total_work / proc_power
+        proc_stamina  = proc_attempts * ce.get('stamina_per_action', 0.75)
+        proc_time     = proc_attempts * ce.get('time_per_action', 1.6) / craft_speed
+        cargo_name    = ce.get('cargo_input_name', item_name(fish_id, recipes))
 
         # Cargo source may be in extraction_by_item (wrapper-resolved) OR cargo_extraction (direct)
         fish_sources = ebi.get(fish_id, []) + cex.get(fish_id, [])
@@ -349,7 +355,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'label':    f'Process {cargo_name} → {iname_out}',
                 'qty_out':  quantity,
                 'qty_label': iname_out,
-                'actions':  proc_actions,
+                'actions':  proc_attempts,
                 'stamina':  proc_stamina,
                 'time_sec': proc_time,
             }
@@ -363,7 +369,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'total_stamina':       total_stamina,
                 'total_time_seconds':  total_time,
                 'total_casts':         total_fish_casts,
-                'total_actions':       proc_actions,
+                'total_actions':       proc_attempts,
                 'items_per_full_node': items_per_node,
                 'external_ingredients': chum_external,
             })
@@ -376,11 +382,13 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
         if oil_per_fish <= 0:
             continue
 
-        fish_needed = quantity / oil_per_fish
-        proc_actions = fish_needed * ic['actions_required']
-        proc_stamina = proc_actions * ic.get('stamina_per_action', 0.0)
-        proc_time    = proc_actions * ic.get('time_per_action', 1.6) / craft_speed
-        input_name   = ic.get('input_item_name', item_name(input_id, recipes))
+        fish_needed   = quantity / oil_per_fish
+        total_work    = fish_needed * ic['actions_required']
+        proc_power    = _tool_power(ic.get('tool_requirements', []), tool_powers)
+        proc_attempts = total_work / proc_power
+        proc_stamina  = proc_attempts * ic.get('stamina_per_action', 0.0)
+        proc_time     = proc_attempts * ic.get('time_per_action', 1.6) / craft_speed
+        input_name    = ic.get('input_item_name', item_name(input_id, recipes))
 
         for fe in ebi.get(input_id, []):
             f_tool_reqs = fe.get('tool_requirements', [])
@@ -432,7 +440,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'label':    f'Process {input_name} → {iname_out}',
                 'qty_out':  quantity,
                 'qty_label': iname_out,
-                'actions':  proc_actions,
+                'actions':  proc_attempts,
                 'stamina':  proc_stamina,
                 'time_sec': proc_time,
             }
@@ -446,7 +454,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'total_stamina':        total_stamina,
                 'total_time_seconds':   total_time,
                 'total_casts':          total_fish_casts,
-                'total_actions':        proc_actions,
+                'total_actions':        proc_attempts,
                 'items_per_full_node':  items_per_node,
                 'external_ingredients': [],
             })
