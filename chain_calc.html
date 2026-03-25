@@ -445,16 +445,12 @@ function renderResults(data) {
         <div class="metric-label">Time</div>
       </div>`;
 
-    if (m.total_casts > 0) {
+    // Total effort = sum of casts+actions across ALL steps (bait, chum, fish, process)
+    const totalEffort = m.steps.reduce((sum, s) => sum + (s.casts ?? s.actions ?? 0), 0);
+    if (totalEffort > 0) {
       html += `<div class="metric-box">
-        <div class="metric-val">${fmt(m.total_casts, 0)}</div>
-        <div class="metric-label">Casts</div>
-      </div>`;
-    }
-    if (m.total_actions > 0) {
-      html += `<div class="metric-box">
-        <div class="metric-val">${fmt(m.total_actions, 0)}</div>
-        <div class="metric-label">Actions</div>
+        <div class="metric-val">${fmt(totalEffort, 0)}</div>
+        <div class="metric-label">Total Effort</div>
       </div>`;
     }
     if (m.items_per_full_node != null) {
@@ -470,7 +466,7 @@ function renderResults(data) {
       <thead><tr>
         <th>Step</th>
         <th class="num">Quantity</th>
-        <th class="num">Casts / Actions</th>
+        <th class="num">Effort</th>
         <th class="num">Stamina</th>
         <th class="num">Time</th>
       </tr></thead>
@@ -493,9 +489,12 @@ function renderResults(data) {
       const isNewGroup = group !== lastGroup;
       lastGroup = group;
 
-      const castAct = (step.type === 'extract' || step.type === 'fish' || step.type === 'bait_fish' || step.type === 'chum_fish')
-        ? `${fmt(step.casts, 0)} casts`
-        : `${fmt(step.actions, 0)} actions`;
+      const isGather = step.type === 'extract' || step.type === 'fish' || step.type === 'bait_fish' || step.type === 'chum_fish';
+      const effortVal = isGather ? step.casts : step.actions;
+      const effortSuffix = isGather ? ' casts' : ' actions';
+      const effortCell = effortVal != null
+        ? `${fmt(effortVal, 0)}<span style="font-size:11px;color:var(--fg-dim)">${effortSuffix}</span>`
+        : '—';
 
       const dimRow = (step.type.startsWith('bait_') || step.type.startsWith('chum_')) ? ' style="opacity:0.75"' : '';
       const groupBadge = isNewGroup ? `<span style="font-size:10px;color:var(--fg-dim);display:block;margin-bottom:1px">${group}</span>` : '';
@@ -505,17 +504,17 @@ function renderResults(data) {
       html += `<tr${dimRow}>
         <td>${groupBadge}${escHtml(step.label)}</td>
         <td class="num">${qtyCell}</td>
-        <td class="num">${castAct}</td>
+        <td class="num">${effortCell}</td>
         <td class="num">${fmt(step.stamina, 1)}</td>
         <td class="num">${fmtTime(step.time_sec)}</td>
       </tr>`;
     }
 
     // Totals row
-    html += `<tr>
+    html += `<tr style="border-top:1px solid var(--border)">
       <td><strong>Total</strong></td>
       <td class="num"></td>
-      <td class="num"></td>
+      <td class="num"><strong>${fmt(totalEffort, 0)}</strong></td>
       <td class="num"><strong>${fmt(m.total_stamina, 1)}</strong></td>
       <td class="num"><strong>${fmtTime(m.total_time_seconds)}</strong></td>
     </tr>`;
