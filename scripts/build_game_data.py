@@ -298,6 +298,21 @@ def build_item_chain_by_item(crafting_list, extraction_by_item, item_list_by_id,
         if not crafted_outputs:
             continue
 
+        # IDs of the extractable inputs for this recipe
+        extractable_ids = {str(i.get('item_id', '')) for i in item_inputs}
+
+        # Other consumed items (not extractable — external ingredients like raw meat)
+        other_consumed = [
+            {
+                'item_id':   str(i.get('item_id', '')),
+                'item_name': item_by_id.get(i.get('item_id', 0), {}).get('name', str(i.get('item_id', ''))),
+                'quantity':  i.get('quantity', 1),
+            }
+            for i in r.get('consumed_item_stacks', [])
+            if i.get('item_type') == 'Item'
+               and str(i.get('item_id', '')) not in extractable_ids
+        ]
+
         for item_input in item_inputs:
             input_id = str(item_input.get('item_id', ''))
             input_name = item_by_id.get(item_input.get('item_id', 0), {}).get('name', input_id)
@@ -312,6 +327,7 @@ def build_item_chain_by_item(crafting_list, extraction_by_item, item_list_by_id,
                 'input_item_id':      input_id,
                 'input_item_qty':     item_input.get('quantity', 1),
                 'input_item_name':    input_name,
+                'other_consumed':     other_consumed,
             }
 
             for output in crafted_outputs:

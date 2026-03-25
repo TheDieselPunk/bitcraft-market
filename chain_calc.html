@@ -465,12 +465,31 @@ function renderResults(data) {
       </tr></thead>
       <tbody>`;
 
+    // Step type → display category for grouping label
+    const STEP_LABELS = {
+      bait_fish:  '🪱 Bait',
+      bait_craft: '🪱 Bait',
+      chum_fish:  '🧊 Chum',
+      chum_craft: '🧊 Chum',
+      fish:       '🎣 Fish',
+      process:    '⚙️ Process',
+      extract:    '⛏️ Extract',
+    };
+
+    let lastGroup = null;
     for (const step of m.steps) {
-      const castAct = step.type === 'extract' || step.type === 'fish'
+      const group = STEP_LABELS[step.type] || step.type;
+      const isNewGroup = group !== lastGroup;
+      lastGroup = group;
+
+      const castAct = (step.type === 'extract' || step.type === 'fish' || step.type === 'bait_fish' || step.type === 'chum_fish')
         ? `${fmt(step.casts, 0)} casts`
         : `${fmt(step.actions, 0)} actions`;
-      html += `<tr>
-        <td>${escHtml(step.label)}</td>
+
+      const dimRow = (step.type.startsWith('bait_') || step.type.startsWith('chum_')) ? ' style="opacity:0.75"' : '';
+      const groupBadge = isNewGroup ? `<span style="font-size:10px;color:var(--fg-dim);display:block;margin-bottom:1px">${group}</span>` : '';
+      html += `<tr${dimRow}>
+        <td>${groupBadge}${escHtml(step.label)}</td>
         <td class="num">${castAct}</td>
         <td class="num">${fmt(step.stamina, 1)}</td>
         <td class="num">${fmtTime(step.time_sec)}</td>
@@ -486,6 +505,16 @@ function renderResults(data) {
     </tr>`;
 
     html += `</tbody></table>`;
+
+    // External ingredients (e.g. raw meat for chum)
+    const ext = m.external_ingredients || [];
+    if (ext.length > 0) {
+      html += `<div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:6px;font-size:12px;color:var(--fg-dim)">
+        <strong>⚠️ External ingredients needed:</strong>
+        ${ext.map(e => `${fmt(e.quantity, 0)} × ${escHtml(e.item_name)}`).join(' &nbsp;·&nbsp; ')}
+        <span style="font-size:11px;opacity:0.7">(not included in stamina/time above — obtain separately)</span>
+      </div>`;
+    }
     html += `</div>`; // /method-card
   });
 

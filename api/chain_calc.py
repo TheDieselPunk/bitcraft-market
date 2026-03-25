@@ -49,6 +49,165 @@ def item_name(item_id, recipes):
     return str(item_id)
 
 
+CHUM_DURATION_SECS = 900  # 15 minutes per chum
+
+
+def _tool_power(tool_reqs, tool_powers):
+    """Return tool power for the first tool requirement, default 1."""
+    tool_type = tool_reqs[0]['tool_type'] if tool_reqs else None
+    return tool_powers.get(tool_type, 1) if tool_type is not None else 1
+
+
+def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
+                      tool_powers, gather_speed, game_data, recipes):
+    """
+    Compute the extra cost of producing bait consumed during total_fish_casts casts.
+    Uses the first small-fish→bait recipe found in item_chain_by_item that has
+    no circular dependency (i.e. bait is not also a required input).
+
+    Returns (extra_steps, extra_stamina, extra_time_sec).
+    """
+    bait_needed = total_fish_casts * consumption_chance
+    icbi = game_data.get('item_chain_by_item', {})
+    ebi  = game_data.get('extraction_by_item', {})
+
+    for bait_recipe in icbi.get(str(bait_id), []):
+        # Skip circular recipes (e.g. Enrich: bait + Hexmoth → bait)
+        if any(c['item_id'] == str(bait_id)
+               for c in bait_recipe.get('other_consumed', [])):
+            continue
+
+        bait_per_run = bait_recipe['output_quantity']
+        if bait_per_run <= 0:
+            continue
+
+        bait_fish_id   = str(bait_recipe['input_item_id'])
+        bait_fish_name = bait_recipe.get('input_item_name', bait_fish_id)
+        craft_runs     = bait_needed / bait_per_run
+        craft_actions  = craft_runs * bait_recipe['actions_required']
+        craft_stamina  = craft_actions * bait_recipe.get('stamina_per_action', 0.0)
+        craft_time     = craft_actions * bait_recipe.get('time_per_action', 1.6) / gather_speed
+
+        for fe in ebi.get(bait_fish_id, []):
+            power         = _tool_power(fe.get('tool_requirements', []), tool_powers)
+            prob          = fe['prob_per_hp'] * power
+            if prob <= 0:
+                continue
+            fish_casts    = craft_runs / prob
+            fish_stamina  = fish_casts * fe['stamina_per_cast']
+            fish_time     = fish_casts * fe['time_per_cast'] / gather_speed
+
+            return (
+                [
+                    {
+                        'type':     'bait_fish',
+                        'label':    f'Catch {bait_fish_name} (for bait)',
+                        'casts':    fish_casts,
+                        'stamina':  fish_stamina,
+                        'time_sec': fish_time,
+                    },
+                    {
+                        'type':     'bait_craft',
+                        'label':    f'Process {bait_fish_name} → {item_name(bait_id, recipes)}',
+                        'actions':  craft_actions,
+                        'stamina':  craft_stamina,
+                        'time_sec': craft_time,
+                    },
+                ],
+                fish_stamina + craft_stamina,
+                fish_time    + craft_time,
+            )
+    return [], 0.0, 0.0
+
+
+def compute_chum_cost(tier, total_ocean_casts, time_per_cast,
+                      tool_powers, gather_speed, game_data, recipes):
+    """
+    Compute the extra cost of producing chum for total_ocean_casts ocean casts.
+    Each chum lasts CHUM_DURATION_SECS seconds of fishing.
+
+    Returns (extra_steps, extra_stamina, extra_time_sec, external_ingredients).
+    external_ingredients = list of {item_name, quantity} for items not calculable
+    (e.g. raw meat from hunting).
+    """
+    casts_per_chum = CHUM_DURATION_SECS / max(time_per_cast, 0.1)
+    chum_needed    = total_ocean_casts / casts_per_chum
+    chum_id        = str(tier * 1_000_000 + 110_026)   # e.g. 5110026
+
+    icbi = game_data.get('item_chain_by_item', {})
+    ebi  = game_data.get('extraction_by_item', {})
+
+    for chum_recipe in icbi.get(chum_id, []):
+        chum_per_run    = chum_recipe.get('output_quantity', 1)
+        if chum_per_run <= 0:
+            continue
+
+        lake_fish_id    = str(chum_recipe['input_item_id'])
+        lake_fish_name  = chum_recipe.get('input_item_name', lake_fish_id)
+        lake_fish_qty   = chum_recipe.get('input_item_qty', 10)
+        craft_runs      = chum_needed / chum_per_run
+        lake_fish_needed = craft_runs * lake_fish_qty
+
+        craft_actions   = craft_runs * chum_recipe['actions_required']
+        craft_stamina   = craft_actions * chum_recipe.get('stamina_per_action', 0.0)
+        craft_time      = craft_actions * chum_recipe.get('time_per_action', 1.6) / gather_speed
+
+        # External ingredients (raw meat etc.)
+        external = [
+            {
+                'item_name': c['item_name'],
+                'quantity':  chum_needed * c['quantity'],
+            }
+            for c in chum_recipe.get('other_consumed', [])
+        ]
+
+        extra_steps = []
+        extra_stamina = craft_stamina
+        extra_time    = craft_time
+
+        for fe in ebi.get(lake_fish_id, []):
+            power         = _tool_power(fe.get('tool_requirements', []), tool_powers)
+            prob          = fe['prob_per_hp'] * power
+            if prob <= 0:
+                continue
+            fish_casts    = lake_fish_needed / prob
+            fish_stamina  = fish_casts * fe['stamina_per_cast']
+            fish_time     = fish_casts * fe['time_per_cast'] / gather_speed
+
+            extra_steps   += [{
+                'type':     'chum_fish',
+                'label':    f'Catch {lake_fish_name} (for chum)',
+                'casts':    fish_casts,
+                'stamina':  fish_stamina,
+                'time_sec': fish_time,
+            }]
+            extra_stamina += fish_stamina
+            extra_time    += fish_time
+
+            # Bait cost for the chum lake fishing
+            for b in fe.get('consumed', []):
+                b_steps, b_stam, b_time = compute_bait_cost(
+                    b['item_id'], b['consumption_chance'], fish_casts,
+                    tool_powers, gather_speed, game_data, recipes
+                )
+                extra_steps   = b_steps + extra_steps   # bait steps come first
+                extra_stamina += b_stam
+                extra_time    += b_time
+            break  # use first extraction source
+
+        extra_steps += [{
+            'type':     'chum_craft',
+            'label':    f'Craft {item_name(chum_id, recipes)} (chum)',
+            'actions':  craft_actions,
+            'stamina':  craft_stamina,
+            'time_sec': craft_time,
+        }]
+
+        return extra_steps, extra_stamina, extra_time, external
+
+    return [], 0.0, 0.0, []
+
+
 def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data, recipes):
     """
     Return a list of method dicts for producing `quantity` of `item_id`.
@@ -149,32 +308,46 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
             total_stamina = fish_stamina + proc_stamina
             total_time    = fish_time + proc_time
 
+            # Chum cost for ocean nodes (resource pattern *110003)
+            chum_steps, chum_stamina, chum_time, chum_external = [], 0.0, 0.0, []
+            tier_match = re.match(r'^(\d)110003$', rid)
+            if tier_match:
+                tier = int(tier_match.group(1))
+                chum_steps, chum_stamina, chum_time, chum_external = compute_chum_cost(
+                    tier, total_fish_casts, fe['time_per_cast'],
+                    tool_powers, gather_speed, game_data, recipes
+                )
+
+            total_stamina = fish_stamina + proc_stamina + chum_stamina
+            total_time    = fish_time    + proc_time    + chum_time
+
+            fish_step = {
+                'type':    'fish',
+                'label':   f'Catch {cargo_name}',
+                'casts':   total_fish_casts,
+                'stamina': fish_stamina,
+                'time_sec': fish_time,
+            }
+            proc_step = {
+                'type':    'process',
+                'label':   f'Process {cargo_name} → {item_name(item_id, recipes)}',
+                'actions': proc_actions,
+                'stamina': proc_stamina,
+                'time_sec': proc_time,
+            }
+
             methods.append({
-                'method_name': f'Cargo — {cargo_name} → {item_name(item_id, recipes)} via {label}',
-                'source_node': rid,
-                'node_label':  label,
-                'fish_name':   cargo_name,
-                'steps': [
-                    {
-                        'type':    'fish',
-                        'label':   f'Catch {cargo_name}',
-                        'casts':   total_fish_casts,
-                        'stamina': fish_stamina,
-                        'time_sec': fish_time,
-                    },
-                    {
-                        'type':    'process',
-                        'label':   f'Process {cargo_name} → {item_name(item_id, recipes)}',
-                        'actions': proc_actions,
-                        'stamina': proc_stamina,
-                        'time_sec': proc_time,
-                    },
-                ],
+                'method_name':         f'Cargo — {cargo_name} → {item_name(item_id, recipes)} via {label}',
+                'source_node':         rid,
+                'node_label':          label,
+                'fish_name':           cargo_name,
+                'steps':               chum_steps + [fish_step, proc_step],
                 'total_stamina':       total_stamina,
                 'total_time_seconds':  total_time,
                 'total_casts':         total_fish_casts,
                 'total_actions':       proc_actions,
                 'items_per_full_node': items_per_node,
+                'external_ingredients': chum_external,
             })
 
     # ── Method C: Item chain (extract item → craft → output) ─────────────────
@@ -211,35 +384,48 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, game_data,
             items_per_node = fish_per_node * oil_per_fish if fish_per_node else None
 
             label = node_label(rid)
-            total_stamina = fish_stamina + proc_stamina
-            total_time    = fish_time + proc_time
+
+            # Bait cost for large-lake nodes that consume bait per cast
+            bait_steps, bait_stamina, bait_time = [], 0.0, 0.0
+            for b in fe.get('consumed', []):
+                bs, bstam, btime = compute_bait_cost(
+                    b['item_id'], b['consumption_chance'], total_fish_casts,
+                    tool_powers, gather_speed, game_data, recipes
+                )
+                bait_steps  += bs
+                bait_stamina += bstam
+                bait_time    += btime
+
+            total_stamina = fish_stamina + proc_stamina + bait_stamina
+            total_time    = fish_time    + proc_time    + bait_time
+
+            fish_step = {
+                'type':     'fish',
+                'label':    f'Catch {input_name}',
+                'casts':    total_fish_casts,
+                'stamina':  fish_stamina,
+                'time_sec': fish_time,
+            }
+            proc_step = {
+                'type':     'process',
+                'label':    f'Process {input_name} → {item_name(item_id, recipes)}',
+                'actions':  proc_actions,
+                'stamina':  proc_stamina,
+                'time_sec': proc_time,
+            }
 
             methods.append({
-                'method_name': f'Item chain — {input_name} → {item_name(item_id, recipes)} via {label}',
-                'source_node': rid,
-                'node_label':  label,
-                'fish_name':   input_name,
-                'steps': [
-                    {
-                        'type':    'fish',
-                        'label':   f'Catch {input_name}',
-                        'casts':   total_fish_casts,
-                        'stamina': fish_stamina,
-                        'time_sec': fish_time,
-                    },
-                    {
-                        'type':    'process',
-                        'label':   f'Process {input_name} → {item_name(item_id, recipes)}',
-                        'actions': proc_actions,
-                        'stamina': proc_stamina,
-                        'time_sec': proc_time,
-                    },
-                ],
-                'total_stamina':       total_stamina,
-                'total_time_seconds':  total_time,
-                'total_casts':         total_fish_casts,
-                'total_actions':       proc_actions,
-                'items_per_full_node': items_per_node,
+                'method_name':          f'Item chain — {input_name} → {item_name(item_id, recipes)} via {label}',
+                'source_node':          rid,
+                'node_label':           label,
+                'fish_name':            input_name,
+                'steps':                bait_steps + [fish_step, proc_step],
+                'total_stamina':        total_stamina,
+                'total_time_seconds':   total_time,
+                'total_casts':          total_fish_casts,
+                'total_actions':        proc_actions,
+                'items_per_full_node':  items_per_node,
+                'external_ingredients': [],
             })
 
     return methods
@@ -264,7 +450,8 @@ class handler(BaseHTTPRequestHandler):
             q_lo = q.lower()
             # Build a set of item IDs that have known chains
             known_ids = (set(game_data.get('extraction_by_item', {}).keys()) |
-                         set(game_data.get('cargo_by_item', {}).keys()))
+                         set(game_data.get('cargo_by_item', {}).keys())        |
+                         set(game_data.get('item_chain_by_item', {}).keys()))
             results = []
             seen = set()
             for iid, r in recipes.items():
