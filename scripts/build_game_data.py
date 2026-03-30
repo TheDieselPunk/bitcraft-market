@@ -368,6 +368,88 @@ def build_item_chain_by_item(crafting_list, extraction_by_item, item_list_by_id,
     return by_item
 
 
+def build_item_to_item_crafting(crafting_list, item_by_id, item_list_by_id, cargo_by_id):
+    """
+    Build {output_item_id_str -> [{recipe info with all consumed items}]}
+
+    Covers ALL crafting recipes producing Item outputs, regardless of input type.
+    This enables recursive chain resolution for multi-step chains (e.g. ingots).
+    """
+    by_item = {}
+
+    for r in crafting_list:
+        crafted_outputs = [
+            o for o in r.get('crafted_item_stacks', [])
+            if o.get('item_type') == 'Item'
+        ]
+        if not crafted_outputs:
+            continue
+
+        consumed = []
+        for i in r.get('consumed_item_stacks', []):
+            itype = i.get('item_type', 'Item')
+            iid   = i.get('item_id', 0)
+            if itype == 'Item':
+                name = item_by_id.get(iid, {}).get('name', str(iid))
+            elif itype == 'Cargo':
+                name = cargo_by_id.get(iid, {}).get('name', str(iid))
+            else:
+                name = str(iid)
+            consumed.append({
+                'item_id':   str(iid),
+                'item_name': name,
+                'quantity':  i.get('quantity', 1),
+                'item_type': itype,
+            })
+
+        entry_base = {
+            'recipe_name':        r.get('name', ''),
+            'stamina_per_action': r.get('stamina_requirement', 0.0),
+            'time_per_action':    r.get('time_requirement', 1.6),
+            'actions_required':   r.get('actions_required', 1),
+            'tool_requirements':  r.get('tool_requirements', []),
+            'level_requirements': r.get('level_requirements', []),
+            'consumed':           consumed,
+        }
+
+        for output in crafted_outputs:
+            out_item_id = output.get('item_id', 0)
+            out_qty     = output.get('quantity', 1)
+            if not out_item_id:
+                continue
+
+            out_item_info = item_by_id.get(out_item_id, {})
+            list_id = out_item_info.get('item_list_id', 0)
+
+            if list_id and list_id != 0:
+                item_list = item_list_by_id.get(list_id)
+                if item_list:
+                    resolved = {}
+                    for possibility in item_list.get('possibilities', []):
+                        poss_prob = possibility.get('probability', 1.0)
+                        for actual in possibility.get('items', []):
+                            actual_id  = str(actual.get('item_id', ''))
+                            actual_qty = actual.get('quantity', 1)
+                            if not actual_id:
+                                continue
+                            resolved[actual_id] = (
+                                resolved.get(actual_id, 0.0)
+                                + out_qty * poss_prob * actual_qty
+                            )
+                    for actual_id, total_qty in resolved.items():
+                        entry = dict(entry_base)
+                        entry['output_quantity'] = total_qty
+                        by_item.setdefault(actual_id, []).append(entry)
+                    continue  # skip wrapper key itself
+                # fallthrough: list not found, use wrapper key
+
+            entry = dict(entry_base)
+            entry['output_quantity'] = out_qty
+            by_item.setdefault(str(out_item_id), []).append(entry)
+
+    return by_item
+
+
 def build_resource_max_health(resource_list):
     """Build {resource_id_str -> max_health} mapping."""
     result = {}
@@ -438,30 +520,43 @@ def main():
     )
     print(f'  {len(item_chain_by_item)} unique items produced via item processing chains.')
 
+    print('Building item_to_item_crafting ...')
+    item_to_item_crafting = build_item_to_item_crafting(
+        crafting_list, item_by_id, item_list_by_id, cargo_by_id
+    )
+    print(f'  {len(item_to_item_crafting)} unique items via item-to-item crafting.')
+
+    # Build a name lookup for all known items (for chain_calc label resolution)
+    item_names = {str(item['id']): item['name'] for item in item_list_raw if item.get('name')}
+
     output = {
-        'extraction_by_item':  extraction_by_item,
-        'cargo_by_item':       cargo_by_item,
-        'item_chain_by_item':  item_chain_by_item,
-        'resource_max_health': resource_max_health,
-        'cargo_extraction':    cargo_extraction,
+        'extraction_by_item':    extraction_by_item,
+        'cargo_by_item':         cargo_by_item,
+        'item_chain_by_item':    item_chain_by_item,
+        'item_to_item_crafting': item_to_item_crafting,
+        'resource_max_health':   resource_max_health,
+        'cargo_extraction':      cargo_extraction,
+        'item_names':            item_names,
         '__meta__': {
-            'built_at':           time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-            'extraction_items':   len(extraction_by_item),
-            'resources':          len(resource_max_health),
-            'cargo_types':        len(cargo_extraction),
-            'cargo_items':        len(cargo_by_item),
-            'item_chain_items':   len(item_chain_by_item),
+            'built_at':              time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'extraction_items':      len(extraction_by_item),
+            'resources':             len(resource_max_health),
+            'cargo_types':           len(cargo_extraction),
+            'cargo_items':           len(cargo_by_item),
+            'item_chain_items':      len(item_chain_by_item),
+            'item_to_item_crafting': len(item_to_item_crafting),
         },
     }
 
     OUT_FILE.write_text(json.dumps(output))
 
     print(f'\n{"-"*50}')
-    print(f'Extraction item entries : {len(extraction_by_item)}')
-    print(f'Resource nodes          : {len(resource_max_health)}')
-    print(f'Cargo extraction types  : {len(cargo_extraction)}')
-    print(f'Items via cargo process : {len(cargo_by_item)}')
-    print(f'Items via item chains   : {len(item_chain_by_item)}')
+    print(f'Extraction item entries   : {len(extraction_by_item)}')
+    print(f'Resource nodes            : {len(resource_max_health)}')
+    print(f'Cargo extraction types    : {len(cargo_extraction)}')
+    print(f'Items via cargo process   : {len(cargo_by_item)}')
+    print(f'Items via item chains     : {len(item_chain_by_item)}')
+    print(f'Items via item-to-item craft: {len(item_to_item_crafting)}')
     print(f'Written to {OUT_FILE}')
 
     # Spot-checks

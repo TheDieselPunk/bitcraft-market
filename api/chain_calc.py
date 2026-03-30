@@ -24,6 +24,7 @@ TOOL_PARAM_MAP = {
     10: 'rod_power',
     4:  'pick_power',
     1:  'axe_power',
+    5:  'hammer_power',
 }
 
 # Fishing node resource_id patterns -> human label
@@ -44,12 +45,17 @@ def node_label(node_id):
     return f'Node {nid}'
 
 
-def item_name(item_id, recipes):
-    """Look up human-readable name from recipes cache."""
-    entry = recipes.get(str(item_id))
+def item_name(item_id, recipes, game_data=None):
+    """Look up human-readable name from recipes cache, falling back to game_data item_names."""
+    sid = str(item_id)
+    entry = recipes.get(sid)
     if entry:
-        return entry.get('name', str(item_id))
-    return str(item_id)
+        return entry.get('name', sid)
+    if game_data:
+        name = game_data.get('item_names', {}).get(sid)
+        if name:
+            return name
+    return sid
 
 
 CHUM_DURATION_SECS = 900  # 15 minutes per chum
@@ -221,6 +227,163 @@ def compute_chum_cost(tier, total_ocean_casts, time_per_cast,
         return extra_steps, extra_stamina, extra_time, external
 
     return [], 0.0, 0.0, []
+
+
+def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, craft_speed,
+                               game_data, recipes, visited=None):
+    """
+    Recursively resolve a multi-step production chain for item_id.
+    Returns (steps, total_stamina, total_time_sec, external_ingredients) or None if unresolvable.
+
+    Resolution order:
+      1. Direct extraction (non-cargo ebi entry) → extract step
+      2. Cargo unpack chain (cbi entry) → mine + unpack steps
+      3. Item-to-item crafting (i2i) → recurse on inputs, append craft step
+      None → caller treats as external ingredient
+    """
+    if visited is None:
+        visited = frozenset()
+    if item_id in visited:
+        return None  # cycle guard
+
+    i2i = game_data.get('item_to_item_crafting', {})
+    cbi = game_data.get('cargo_by_item', {})
+    ebi = game_data.get('extraction_by_item', {})
+    cex = game_data.get('cargo_extraction', {})
+
+    sid = str(item_id)
+
+    # ── Path 1: directly extractable item ────────────────────────────────────
+    direct = [e for e in ebi.get(sid, []) if not e.get('cargo_input_id')]
+    if direct:
+        fe = direct[0]
+        power = _tool_power(fe.get('tool_requirements', []), tool_powers)
+        prob  = fe['prob_per_hp'] * power
+        if prob > 0:
+            casts   = quantity / prob
+            stamina = casts * fe['stamina_per_cast']
+            time_s  = casts * fe['time_per_cast'] / gather_speed
+            iname   = item_name(sid, recipes, game_data)
+            return (
+                [{
+                    'type':     'extract',
+                    'label':    f'Extract {iname}',
+                    'qty_out':  quantity,
+                    'qty_label': iname,
+                    'casts':    casts,
+                    'stamina':  stamina,
+                    'time_sec': time_s,
+                }],
+                stamina, time_s, []
+            )
+
+    # ── Path 2: from cargo unpack (e.g. Ore Chunk → Ore Piece) ───────────────
+    if sid in cbi:
+        ce            = cbi[sid][0]
+        cargo_id      = str(ce['cargo_input_id'])
+        out_qty       = ce['output_quantity']
+        cargo_input_qty = ce.get('cargo_input_qty', 1)
+        if out_qty > 0:
+            craft_runs    = quantity / out_qty
+            cargo_needed  = craft_runs * cargo_input_qty
+            total_work    = craft_runs * ce['actions_required']
+            proc_power    = _tool_power(ce.get('tool_requirements', []), tool_powers)
+            proc_attempts = total_work / proc_power
+            proc_stamina  = proc_attempts * ce.get('stamina_per_action', 0.0)
+            proc_time     = proc_attempts * ce.get('time_per_action', 1.6) / craft_speed
+
+            for fe in ebi.get(cargo_id, []) + cex.get(cargo_id, []):
+                power = _tool_power(fe.get('tool_requirements', []), tool_powers)
+                prob  = fe['prob_per_hp'] * power
+                if prob <= 0:
+                    continue
+                casts       = cargo_needed / prob
+                mine_stam   = casts * fe['stamina_per_cast']
+                mine_time   = casts * fe['time_per_cast'] / gather_speed
+                cargo_name  = ce.get('cargo_input_name', cargo_id)
+                iname_out   = item_name(sid, recipes, game_data)
+                return (
+                    [
+                        {
+                            'type':     'extract',
+                            'label':    f'Mine {cargo_name}',
+                            'qty_out':  cargo_needed,
+                            'qty_label': cargo_name,
+                            'casts':    casts,
+                            'stamina':  mine_stam,
+                            'time_sec': mine_time,
+                        },
+                        {
+                            'type':     'process',
+                            'label':    f'Unpack {cargo_name} \u2192 {iname_out}',
+                            'qty_out':  quantity,
+                            'qty_label': iname_out,
+                            'actions':  proc_attempts,
+                            'stamina':  proc_stamina,
+                            'time_sec': proc_time,
+                        },
+                    ],
+                    mine_stam + proc_stamina,
+                    mine_time + proc_time,
+                    []
+                )
+
+    # ── Path 3: item-to-item crafting ─────────────────────────────────────────
+    if sid in i2i:
+        new_visited = visited | {sid}
+        for recipe in i2i[sid]:
+            out_qty = recipe.get('output_quantity', 1)
+            if out_qty <= 0:
+                continue
+
+            craft_runs    = quantity / out_qty
+            total_work    = craft_runs * recipe.get('actions_required', 1)
+            craft_power   = _tool_power(recipe.get('tool_requirements', []), tool_powers)
+            craft_attempts = total_work / craft_power
+            craft_stamina  = craft_attempts * recipe.get('stamina_per_action', 0.0)
+            craft_time     = craft_attempts * recipe.get('time_per_action', 1.6) / craft_speed
+
+            pre_steps   = []
+            pre_stamina = 0.0
+            pre_time    = 0.0
+            external    = []
+
+            for consumed in recipe.get('consumed', []):
+                c_id         = consumed['item_id']
+                c_qty_needed = craft_runs * consumed['quantity']
+                c_name       = consumed.get('item_name', c_id)
+
+                sub = resolve_item_crafting_chain(
+                    c_id, c_qty_needed, tool_powers, gather_speed, craft_speed,
+                    game_data, recipes, new_visited
+                )
+                if sub is None:
+                    external.append({'item_name': c_name, 'quantity': c_qty_needed})
+                else:
+                    sub_steps, sub_stam, sub_time, sub_ext = sub
+                    pre_steps   += sub_steps
+                    pre_stamina += sub_stam
+                    pre_time    += sub_time
+                    external    += sub_ext
+
+            iname_out  = item_name(sid, recipes, game_data)
+            craft_step = {
+                'type':     'process',
+                'label':    f'Craft {iname_out}',
+                'qty_out':  quantity,
+                'qty_label': iname_out,
+                'actions':  craft_attempts,
+                'stamina':  craft_stamina,
+                'time_sec': craft_time,
+            }
+            return (
+                pre_steps + [craft_step],
+                pre_stamina + craft_stamina,
+                pre_time + craft_time,
+                external
+            )
+
+    return None
 
 
 def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_speed, game_data, recipes):
@@ -459,6 +622,32 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'external_ingredients': [],
             })
 
+    # ── Method D: Multi-step crafting chain (e.g. ingots) ─────────────────────
+    # Triggers for items reachable via item-to-item crafting but not by A/B/C.
+    i2i = game_data.get('item_to_item_crafting', {})
+    if sid in i2i and sid not in ebi and sid not in cbi and sid not in icbi:
+        result = resolve_item_crafting_chain(
+            sid, quantity, tool_powers, gather_speed, craft_speed, game_data, recipes
+        )
+        if result:
+            steps, total_stamina, total_time, external = result
+            total_casts   = sum(s.get('casts',   0) for s in steps)
+            total_actions = sum(s.get('actions', 0) for s in steps)
+            iname = item_name(sid, recipes)
+            methods.append({
+                'method_name':         f'Crafting chain — {iname}',
+                'source_node':         None,
+                'node_label':          'Multi-step crafting',
+                'fish_name':           None,
+                'steps':               steps,
+                'total_stamina':       total_stamina,
+                'total_time_seconds':  total_time,
+                'total_casts':         total_casts,
+                'total_actions':       total_actions,
+                'items_per_full_node': None,
+                'external_ingredients': external,
+            })
+
     return methods
 
 
@@ -482,7 +671,8 @@ class handler(BaseHTTPRequestHandler):
             # Build a set of item IDs that have known chains
             known_ids = (set(game_data.get('extraction_by_item', {}).keys()) |
                          set(game_data.get('cargo_by_item', {}).keys())        |
-                         set(game_data.get('item_chain_by_item', {}).keys()))
+                         set(game_data.get('item_chain_by_item', {}).keys())   |
+                         set(game_data.get('item_to_item_crafting', {}).keys()))
             results = []
             seen = set()
             for iid, r in recipes.items():
@@ -502,12 +692,13 @@ class handler(BaseHTTPRequestHandler):
             return
 
         try:
-            quantity    = float(_p('quantity', '1'))
-            rod_power   = float(_p('rod_power', '1'))
-            pick_power  = float(_p('pick_power', '1'))
-            axe_power   = float(_p('axe_power', '1'))
-            gather_speed = float(_p('gather_speed', '1.0'))
-            craft_speed  = float(_p('craft_speed',  '1.0'))
+            quantity      = float(_p('quantity', '1'))
+            rod_power     = float(_p('rod_power',    '1'))
+            pick_power    = float(_p('pick_power',   '1'))
+            axe_power     = float(_p('axe_power',    '1'))
+            hammer_power  = float(_p('hammer_power', '1'))
+            gather_speed  = float(_p('gather_speed', '1.0'))
+            craft_speed   = float(_p('craft_speed',  '1.0'))
             if gather_speed <= 0:
                 gather_speed = 1.0
             if craft_speed <= 0:
@@ -522,6 +713,7 @@ class handler(BaseHTTPRequestHandler):
             10: rod_power,
             4:  pick_power,
             1:  axe_power,
+            5:  hammer_power,
         }
 
         try:

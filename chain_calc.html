@@ -56,6 +56,7 @@
 
     .two-col   { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    .four-col  { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
 
     /* ── Argent ring checkboxes ── */
     .ring-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; margin-top: 6px; }
@@ -211,7 +212,7 @@
     <!-- Tool Powers -->
     <div class="card">
       <div class="card-title">Tool Powers</div>
-      <div class="three-col" style="margin-bottom:12px">
+      <div class="four-col" style="margin-bottom:12px">
         <div class="field" style="margin:0">
           <label>Rod Power</label>
           <input type="number" id="rod-power" value="1" min="1" max="20" step="1" />
@@ -223,6 +224,10 @@
         <div class="field" style="margin:0">
           <label>Axe Power</label>
           <input type="number" id="axe-power" value="1" min="1" max="20" step="1" />
+        </div>
+        <div class="field" style="margin:0">
+          <label>Hammer Power</label>
+          <input type="number" id="hammer-power" value="1" min="1" max="20" step="1" />
         </div>
       </div>
       <div class="two-col" style="gap:8px;margin-bottom:0">
@@ -269,7 +274,7 @@ const RINGS = [
   { id: '1598355237', label: "Fisher's",        toolParam: 'rod'  },
   { id: '1576333470', label: "Miner's",          toolParam: 'pick' },
   { id: '49775758',   label: "Forester's",       toolParam: 'axe'  },
-  { id: '765471747',  label: "Smith's",          toolParam: null   },
+  { id: '765471747',  label: "Smith's",          toolParam: 'hammer' },
   { id: '799730992',  label: "Carpenter's",      toolParam: null   },
   { id: '991210407',  label: "Tailor's",         toolParam: null   },
   { id: '1567406362', label: "Farmer's",         toolParam: null   },
@@ -390,7 +395,7 @@ function applyToolbelt(data) {
   const inventories = data.inventories || [];
 
   // Tool type -> power mapping
-  const toolMap = { 10: null, 4: null, 1: null };
+  const toolMap = { 10: null, 4: null, 1: null, 5: null };
 
   for (const bag of inventories) {
     if (bag.inventoryName?.toLowerCase() !== 'toolbelt') continue;
@@ -408,9 +413,10 @@ function applyToolbelt(data) {
     }
   }
 
-  if (toolMap[10]) document.getElementById('rod-power').value  = toolMap[10].power || 1;
-  if (toolMap[4])  document.getElementById('pick-power').value = toolMap[4].power  || 1;
-  if (toolMap[1])  document.getElementById('axe-power').value  = toolMap[1].power  || 1;
+  if (toolMap[10]) document.getElementById('rod-power').value    = toolMap[10].power || 1;
+  if (toolMap[4])  document.getElementById('pick-power').value   = toolMap[4].power  || 1;
+  if (toolMap[1])  document.getElementById('axe-power').value    = toolMap[1].power  || 1;
+  if (toolMap[5])  document.getElementById('hammer-power').value = toolMap[5].power  || 1;
 
   // ── Argent ring autofill ──────────────────────────────────────────────────
   // Collect all item IDs the player owns (inventory bags)
@@ -435,6 +441,7 @@ function applyToolbelt(data) {
   if (toolMap[10]) parts.push(`Rod ×${toolMap[10].power}`);
   if (toolMap[4])  parts.push(`Pick ×${toolMap[4].power}`);
   if (toolMap[1])  parts.push(`Axe ×${toolMap[1].power}`);
+  if (toolMap[5])  parts.push(`Hammer ×${toolMap[5].power}`);
   const checkedRings = RINGS.filter(r => document.getElementById(`ring-${r.id}`)?.checked);
   if (checkedRings.length) parts.push(`Rings: ${checkedRings.map(r => r.label).join(', ')}`);
   if (parts.length) status.textContent = parts.join(' · ');
@@ -448,9 +455,10 @@ async function calculate() {
   }
 
   const quantity    = parseFloat(document.getElementById('quantity').value) || 100;
-  const rodPower    = (parseFloat(document.getElementById('rod-power').value)  || 1) * ringMultiplier('rod');
-  const pickPower   = (parseFloat(document.getElementById('pick-power').value) || 1) * ringMultiplier('pick');
-  const axePower    = (parseFloat(document.getElementById('axe-power').value)  || 1) * ringMultiplier('axe');
+  const rodPower    = (parseFloat(document.getElementById('rod-power').value)    || 1) * ringMultiplier('rod');
+  const pickPower   = (parseFloat(document.getElementById('pick-power').value)   || 1) * ringMultiplier('pick');
+  const axePower    = (parseFloat(document.getElementById('axe-power').value)    || 1) * ringMultiplier('axe');
+  const hammerPower = (parseFloat(document.getElementById('hammer-power').value) || 1) * ringMultiplier('hammer');
   const speedPct    = parseFloat(document.getElementById('gather-speed').value) || 0;
   const craftPct    = parseFloat(document.getElementById('craft-speed').value)  || 0;
   const gatherSpeed = 1.0 + speedPct / 100;
@@ -461,6 +469,7 @@ async function calculate() {
     + `&rod_power=${rodPower}`
     + `&pick_power=${pickPower}`
     + `&axe_power=${axePower}`
+    + `&hammer_power=${hammerPower}`
     + `&gather_speed=${gatherSpeed}`
     + `&craft_speed=${craftSpeed}`;
 
