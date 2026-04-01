@@ -264,10 +264,12 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
             stamina = casts * fe['stamina_per_cast']
             time_s  = casts * fe['time_per_cast'] / gather_speed
             iname   = item_name(sid, recipes, game_data)
+            tt      = fe.get('tool_requirements', [{}])[0].get('tool_type') if fe.get('tool_requirements') else None
+            verb    = 'Chop' if tt == 1 else 'Mine' if tt == 4 else 'Extract'
             return (
                 [{
                     'type':     'extract',
-                    'label':    f'Extract {iname}',
+                    'label':    f'{verb} {iname}',
                     'qty_out':  quantity,
                     'qty_label': iname,
                     'casts':    casts,
@@ -302,11 +304,13 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
                 mine_time   = casts * fe['time_per_cast'] / gather_speed
                 cargo_name  = ce.get('cargo_input_name', cargo_id)
                 iname_out   = item_name(sid, recipes, game_data)
+                tt          = fe.get('tool_requirements', [{}])[0].get('tool_type') if fe.get('tool_requirements') else None
+                verb        = 'Chop' if tt == 1 else 'Mine' if tt == 4 else 'Extract'
                 return (
                     [
                         {
                             'type':     'extract',
-                            'label':    f'Mine {cargo_name}',
+                            'label':    f'{verb} {cargo_name}',
                             'qty_out':  cargo_needed,
                             'qty_label': cargo_name,
                             'casts':    casts,
@@ -315,7 +319,7 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
                         },
                         {
                             'type':     'process',
-                            'label':    f'Unpack {cargo_name} \u2192 {iname_out}',
+                            'label':    f'Extract {cargo_name} \u2192 {iname_out}',
                             'qty_out':  quantity,
                             'qty_label': iname_out,
                             'actions':  proc_attempts,
@@ -336,12 +340,16 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
             if out_qty <= 0:
                 continue
 
-            craft_runs    = quantity / out_qty
-            total_work    = craft_runs * recipe.get('actions_required', 1)
-            craft_power   = _tool_power(recipe.get('tool_requirements', []), tool_powers)
+            craft_runs     = quantity / out_qty
+            total_work     = craft_runs * recipe.get('actions_required', 1)
+            craft_power    = _tool_power(recipe.get('tool_requirements', []), tool_powers)
             craft_attempts = total_work / craft_power
             craft_stamina  = craft_attempts * recipe.get('stamina_per_action', 0.0)
-            craft_time     = craft_attempts * recipe.get('time_per_action', 1.6) / craft_speed
+            # Passive recipes (no stamina, no tool — e.g. furnace smelt) take real-world time
+            # but don't consume player time, so exclude from total.
+            is_passive  = (recipe.get('stamina_per_action', 0) == 0
+                           and not recipe.get('tool_requirements'))
+            craft_time  = 0.0 if is_passive else craft_attempts * recipe.get('time_per_action', 1.6) / craft_speed
 
             pre_steps   = []
             pre_stamina = 0.0
