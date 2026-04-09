@@ -182,6 +182,15 @@
     /* ── Left column layout ── */
     .left-col { display: flex; flex-direction: column; gap: 14px; }
 
+    /* ── Equipment Sets card ── */
+    .set-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .set-row:last-child { border-bottom: none; }
+    .set-label { font-weight: 600; color: var(--fg); min-width: 72px; }
+    .set-detail { color: var(--accent2); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .set-meta  { color: var(--fg-dim); font-size: 11px; white-space: nowrap; }
+    .set-row-empty .set-detail { color: var(--fg-dim); }
+    .sets-save-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+
     /* scrollbar */
     ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: var(--surface); } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   </style>
@@ -292,6 +301,16 @@
       </div>
     </div>
 
+    <!-- Equipment Sets -->
+    <div class="card">
+      <div class="card-title">Equipment Sets</div>
+      <div id="sets-status"><!-- populated by JS --></div>
+      <div class="sets-save-row">
+        <button class="btn secondary" onclick="saveCurrentSet('gathering')">💾 Save Gathering</button>
+        <button class="btn secondary" onclick="saveCurrentSet('crafting')">💾 Save Crafting</button>
+      </div>
+    </div>
+
   </div><!-- /left-col -->
 
   <!-- ── Right Column (Stats) ── -->
@@ -359,6 +378,7 @@
   </div>
 </div>
 
+<script src="/equipment_sets.js"></script>
 <script>
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -429,6 +449,58 @@ async function init() {
   } catch (e) {
     console.error('Failed to load data:', e);
   }
+
+  renderSetsStatus();
+}
+
+// ── Equipment Sets ─────────────────────────────────────────────────────────
+
+function saveCurrentSet(type) {
+  const foodSel    = document.getElementById('food-select');
+  const elixSel    = document.getElementById('elixir-select');
+  const foodData   = foodSel.value
+    ? JSON.parse(foodSel.options[foodSel.selectedIndex].dataset.json || 'null')
+    : null;
+  const elixirData = elixSel.value
+    ? JSON.parse(elixSel.options[elixSel.selectedIndex].dataset.json || 'null')
+    : null;
+
+  EquipSets.saveSet(type, equippedItems, foodData, elixirData);
+  renderSetsStatus();
+}
+
+function clearCurrentSet(type) {
+  EquipSets.clearSet(type);
+  renderSetsStatus();
+}
+
+function renderSetsStatus() {
+  const el = document.getElementById('sets-status');
+  if (!el) return;
+
+  el.innerHTML = ['gathering', 'crafting'].map(type => {
+    const set   = EquipSets.loadSet(type);
+    const label = type.charAt(0).toUpperCase() + type.slice(1);
+
+    if (!set) {
+      return `<div class="set-row set-row-empty">
+        <span class="set-label">${label}</span>
+        <span class="set-detail">Not saved</span>
+      </div>`;
+    }
+
+    const stats     = EquipSets.computeStatsFromData(set.equippedItems, set.foodData, set.elixirData);
+    const summary   = EquipSets.statsSummary(stats);
+    const when      = EquipSets.timeAgo(set.savedAt);
+    const itemCount = Object.values(set.equippedItems).filter(Boolean).length;
+
+    return `<div class="set-row">
+      <span class="set-label">${label}</span>
+      <span class="set-detail" title="${summary}">${itemCount} items · ${summary}</span>
+      <span class="set-meta">${when}</span>
+      <button class="btn secondary" style="padding:2px 8px;font-size:11px;flex-shrink:0" onclick="clearCurrentSet('${type}')">✕</button>
+    </div>`;
+  }).join('');
 }
 
 // ── Mode ───────────────────────────────────────────────────────────────────
