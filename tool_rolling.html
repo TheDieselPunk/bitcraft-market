@@ -163,7 +163,7 @@
       <div class="field">
         <label>Confidence</label>
         <div style="display:flex;align-items:center;gap:6px">
-          <input type="number" id="confidence-pct" min="1" max="99" value="90"
+          <input type="number" id="confidence-pct" min="1" max="99" value="63"
             style="width:58px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--fg);padding:4px 6px;font-size:13px">
           <span style="color:var(--fg-dim);font-size:13px">%</span>
         </div>
@@ -661,7 +661,7 @@ function calculate() {
     el.className   = 'metric-val' + (val === '∞' ? ' impossible' : '');
   };
 
-  const confPct = Math.max(1, Math.min(99, parseFloat(document.getElementById('confidence-pct').value) || 90));
+  const confPct = Math.max(1, Math.min(99, parseFloat(document.getElementById('confidence-pct').value) || 63));
   const nChainsConf = pTarget > 0 ? Math.ceil(Math.log(1 - confPct / 100) / Math.log(1 - pTarget)) : Infinity;
   const confScale   = pTarget > 0 ? nChainsConf / expectedChains : 0;
 
