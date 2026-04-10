@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tool Crafting Calculator — Bitcraft</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #1e1e2e;
+      --surface:   #2a2a3e;
+      --surface2:  #313244;
+      --surface3:  #3a3a50;
+      --accent:    #cba6f7;
+      --accent2:   #89b4fa;
+      --green:     #a6e3a1;
+      --yellow:    #f9e2af;
+      --red:       #f38ba8;
+      --fg:        #cdd6f4;
+      --fg-dim:    #6c7086;
+      --border:    #45475a;
+    }
+
+    body { background: var(--bg); color: var(--fg); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 16px; color: var(--accent); font-weight: 700; }
+    header a  { color: var(--fg-dim); font-size: 12px; text-decoration: none; }
+    header a:hover { color: var(--fg); }
+    .nav-sep { color: var(--border); }
+
+    main {
+      max-width: 1500px; margin: 0 auto; padding: 20px 24px;
+      display: grid; grid-template-columns: 300px 1fr; gap: 20px;
+      align-items: start;
+    }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    .card:last-child { margin-bottom: 0; }
+    .card-title { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; font-weight: 600; }
+
+    .field { margin-bottom: 12px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label { display: block; font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+    .field select {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 7px 10px; color: var(--fg); font-size: 13px; outline: none;
+    }
+    .field select:focus { border-color: var(--accent); }
+    .field select.q-Uncommon  { color: #a6e3a1; border-color: #a6e3a1; }
+    .field select.q-Rare      { color: #89b4fa; border-color: #89b4fa; }
+    .field select.q-Epic      { color: #cba6f7; border-color: #cba6f7; }
+    .field select.q-Legendary { color: #f9e2af; border-color: #f9e2af; }
+    .field select.q-Mythic    { color: #f38ba8; border-color: #f38ba8; }
+
+    .filter-tier { margin-bottom: 12px; }
+    .filter-tier:last-child { margin-bottom: 0; }
+    .filter-tier-label { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+    .filter-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .q-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      border: 1px solid; border-radius: 4px; padding: 3px 8px;
+      font-size: 11px; font-weight: 600; cursor: pointer; user-select: none;
+      transition: opacity .15s;
+    }
+    .q-chip input { display: none; }
+    .q-chip.unchecked { opacity: 0.3; }
+    .q-chip.Uncommon  { color: #a6e3a1; border-color: #a6e3a1; background: rgba(166,227,161,.08); }
+    .q-chip.Rare      { color: #89b4fa; border-color: #89b4fa; background: rgba(137,180,250,.08); }
+    .q-chip.Epic      { color: #cba6f7; border-color: #cba6f7; background: rgba(203,166,247,.08); }
+    .q-chip.Legendary { color: #f9e2af; border-color: #f9e2af; background: rgba(249,226,175,.08); }
+    .q-chip.Mythic    { color: #f38ba8; border-color: #f38ba8; background: rgba(243,139,168,.08); }
+
+    /* Optimize button */
+    .btn-optimize {
+      width: 100%; margin-top: 14px; padding: 9px;
+      background: var(--surface2); border: 1px solid var(--accent);
+      color: var(--accent); border-radius: 6px; font-size: 13px; font-weight: 700;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-optimize:hover { background: rgba(203,166,247,.12); }
+    .btn-optimize:disabled { border-color: var(--border); color: var(--fg-dim); cursor: not-allowed; }
+    .optimize-note { font-size: 11px; color: var(--green); margin-top: 8px; min-height: 16px; }
+
+    /* Metrics */
+    .metrics-row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .metric-box { background: var(--surface2); border-radius: 6px; padding: 10px 16px; text-align: center; flex: 1; min-width: 80px; }
+    .metric-val   { font-size: 20px; font-weight: 700; color: var(--accent2); line-height: 1.1; }
+    .metric-label { font-size: 10px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
+    .metric-val.impossible { color: var(--fg-dim); font-size: 14px; }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    thead tr { background: var(--surface2); }
+    th { padding: 8px 12px; text-align: left; font-size: 10px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+    th.num, td.num { text-align: right; }
+    tbody tr { border-top: 1px solid var(--border); }
+    tbody tr:hover { background: var(--surface2); }
+    td { padding: 8px 12px; white-space: nowrap; }
+    tbody tr.totals-row { border-top: 2px solid var(--border); background: var(--surface2); font-weight: 600; }
+
+    .tier-label { font-weight: 600; }
+    .sub-label  { color: var(--fg-dim); font-size: 11px; display: block; }
+    .mat-name   { color: var(--fg-dim); font-size: 10px; display: block; }
+
+    /* Probability breakdown */
+    .prob-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; font-size: 12px; border-bottom: 1px solid var(--border); }
+    .prob-row:last-child { border-bottom: none; }
+    .prob-row.is-target { background: rgba(255,255,255,.03); border-radius: 4px; padding: 5px 6px; margin: 0 -6px; }
+    .prob-row.is-target .prob-pct { color: var(--fg); font-weight: 700; }
+    .prob-q   { font-weight: 600; }
+    .prob-pct { color: var(--fg-dim); }
+
+    .hint { font-size: 11px; color: var(--fg-dim); margin-bottom: 12px; line-height: 1.5; }
+    .price-note { font-size: 10px; color: var(--fg-dim); margin-top: 10px; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Bitcraft Market Advisor</h1>
+  <span class="nav-sep">|</span>
+  <a href="index.html">Market</a>
+  <span class="nav-sep">|</span>
+  <a href="chain_calc.html">Chain Calc</a>
+  <span class="nav-sep">|</span>
+  <a href="equipment_sim.html">Equipment Sim</a>
+  <span class="nav-sep">|</span>
+  <a href="rod_crafting.html" style="color:var(--fg)">Tool Crafting</a>
+</header>
+
+<main>
+  <!-- ── Left panel ── -->
+  <div>
+    <div class="card">
+      <div class="card-title">Target</div>
+      <div class="field">
+        <label>Tier</label>
+        <select id="target-tier">
+          <option value="2">T2 — Pyrelite Tool</option>
+          <option value="3">T3 — Emarium Tool</option>
+          <option value="4">T4 — Elenvar Tool</option>
+          <option value="5">T5 — Luminite Tool</option>
+          <option value="6">T6 — Rathium Tool</option>
+          <option value="7">T7 — Aurumite Tool</option>
+          <option value="8" selected>T8 — Celestium Tool</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Quality</label>
+        <select id="target-rarity"></select>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Upgrade Filters</div>
+      <p class="hint">Which tool qualities to bother upgrading at each intermediate tier. Unchecked = scrap or sell instead.</p>
+      <div id="filter-container"></div>
+      <button class="btn-optimize" id="btn-optimize" disabled>Optimize Filters for Cost</button>
+      <div class="optimize-note" id="optimize-note"></div>
+    </div>
+  </div>
+
+  <!-- ── Right panel ── -->
+  <div>
+    <div class="card">
+      <div class="card-title" id="summary-title">Expected Cost — 1 Target Tool</div>
+      <div class="metrics-row">
+        <div class="metric-box">
+          <div class="metric-val" id="m-chains">—</div>
+          <div class="metric-label">T1 Crafts</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" id="m-prob">—</div>
+          <div class="metric-label" id="m-prob-label">P(target) per chain</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" id="m-total-crafts">—</div>
+          <div class="metric-label">Total Crafts</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" id="m-total-cost">—</div>
+          <div class="metric-label">Est. Market Cost</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Material Requirements</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Tier</th>
+              <th>Tool</th>
+              <th class="num">Crafts</th>
+              <th class="num">% chains</th>
+              <th class="num">Ingots</th>
+              <th class="num">Rope</th>
+              <th class="num">Plank</th>
+              <th class="num">Leather</th>
+              <th class="num">Cost/craft</th>
+              <th class="num">Tier total cost</th>
+            </tr>
+          </thead>
+          <tbody id="results-body">
+            <tr><td colspan="10" style="text-align:center;color:var(--fg-dim);padding:24px">Loading prices…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="price-note" id="price-note"></p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Quality Distribution at Target Tier</div>
+      <div id="prob-breakdown"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── Static data ──────────────────────────────────────────────────────────────
+
+const QUALITIES = ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'];
+
+const TIER_QUALITIES = {
+  2: ['Uncommon', 'Rare'],
+  3: ['Uncommon', 'Rare', 'Epic'],
+  4: ['Uncommon', 'Rare', 'Epic', 'Legendary'],
+  5: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  6: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  7: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  8: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+};
+
+// Tier-invariant transition; Mythic absorbing (Rarity6 not implemented)
+const TRANSITION = {
+  'Uncommon':  { 'Uncommon': 0.70,    'Rare': 0.30 },
+  'Rare':      { 'Rare': 0.85,        'Epic': 0.15 },
+  'Epic':      { 'Epic': 0.925,       'Legendary': 0.075 },
+  'Legendary': { 'Legendary': 0.9625, 'Mythic': 0.0375 },
+  'Mythic':    { 'Mythic': 1.0 },
+};
+
+// Materials for each craft step; ingotId/ropeId/plankId/leatherId for price lookup
+const STEP_DATA = {
+  1: { tool:'Ferralith Tool', action:'Initial craft',
+       ingotId:'1050001', ingot:'Ferralith Ingot', ingotQty:4,
+       ropeId:'1090004',  rope:'Rough Rope',
+       plankId:'1020003', plank:'Rough Plank',
+       leatherId:'1070004', leather:'Rough Leather' },
+  2: { tool:'Pyrelite Tool',  action:'Upgrade T1→T2',
+       ingotId:'2050001', ingot:'Pyrelite Ingot', ingotQty:4,
+       ropeId:'2090004',  rope:'Simple Rope',
+       plankId:'2020003', plank:'Simple Plank',
+       leatherId:'2070004', leather:'Simple Leather' },
+  3: { tool:'Emarium Tool',   action:'Upgrade T2→T3',
+       ingotId:'3050001', ingot:'Emarium Ingot', ingotQty:4,
+       ropeId:'3090004',  rope:'Sturdy Rope',
+       plankId:'3020003', plank:'Sturdy Plank',
+       leatherId:'3070004', leather:'Sturdy Leather' },
+  4: { tool:'Elenvar Tool',   action:'Upgrade T3→T4',
+       ingotId:'4050001', ingot:'Elenvar Ingot', ingotQty:4,
+       ropeId:'4090004',  rope:'Fine Rope',
+       plankId:'4020003', plank:'Fine Plank',
+       leatherId:'4070004', leather:'Fine Leather' },
+  5: { tool:'Luminite Tool',  action:'Upgrade T4→T5',
+       ingotId:'5050001', ingot:'Luminite Ingot', ingotQty:4,
+       ropeId:'5090004',  rope:'Exquisite Rope',
+       plankId:'5020003', plank:'Exquisite Plank',
+       leatherId:'5070004', leather:'Exquisite Leather' },
+  6: { tool:'Rathium Tool',   action:'Upgrade T5→T6',
+       ingotId:'6050001', ingot:'Rathium Ingot', ingotQty:4,
+       ropeId:'6090004',  rope:'Peerless Rope',
+       plankId:'6020003', plank:'Peerless Plank',
+       leatherId:'6070004', leather:'Peerless Leather' },
+  7: { tool:'Aurumite Tool',  action:'Upgrade T6→T7',
+       ingotId:'1899017490', ingot:'Aurumite Ingot', ingotQty:4,
+       ropeId:'625147590',   rope:'Ornate Rope',
+       plankId:'1639308227', plank:'Ornate Plank',
+       leatherId:'806992520', leather:'Ornate Leather' },
+  8: { tool:'Celestium Tool', action:'Upgrade T7→T8',
+       ingotId:'1464752960', ingot:'Celestium Ingot', ingotQty:4,
+       ropeId:'1224328894',  rope:'Pristine Rope',
+       plankId:'28056473',   plank:'Pristine Plank',
+       leatherId:'1743778001', leather:'Pristine Leather' },
+};
+
+const Q_COLOR = {
+  Uncommon:'#a6e3a1', Rare:'#89b4fa', Epic:'#cba6f7',
+  Legendary:'#f9e2af', Mythic:'#f38ba8',
+};
+
+// ── Prices (loaded from tool_prices.json) ────────────────────────────────────
+
+let prices = {};   // item_id → medianSellPrice
+
+async function loadPrices() {
+  try {
+    const r = await fetch('data/tool_prices.json');
+    const data = await r.json();
+    for (const [id, entry] of Object.entries(data)) {
+      if (id === '__meta__') continue;
+      prices[id] = entry.medianSellPrice ?? null;
+    }
+    const meta = data.__meta__ || {};
+    document.getElementById('price-note').textContent =
+      `Prices: median sell. Last updated: ${meta.built_at ? new Date(meta.built_at).toLocaleString() : 'unknown'}.`;
+    document.getElementById('btn-optimize').disabled = false;
+  } catch (e) {
+    document.getElementById('price-note').textContent = 'Could not load price data.';
+  }
+  calculate();
+}
+
+function costPerCraft(t) {
+  const s = STEP_DATA[t];
+  const p = id => prices[id] ?? 0;
+  return s.ingotQty * p(s.ingotId) + 2 * p(s.ropeId) + 2 * p(s.plankId) + 2 * p(s.leatherId);
+}
+
+function hasPrices(t) {
+  const s = STEP_DATA[t];
+  return [s.ingotId, s.ropeId, s.plankId, s.leatherId].every(id => prices[id] != null);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function applyTransition(dist) {
+  const next = {};
+  for (const [fromQ, prob] of Object.entries(dist)) {
+    const row = TRANSITION[fromQ];
+    if (!row) continue;
+    for (const [toQ, p] of Object.entries(row)) {
+      next[toQ] = (next[toQ] || 0) + prob * p;
+    }
+  }
+  return next;
+}
+
+function fmt(n, decimals = 0) {
+  if (!isFinite(n)) return '∞';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return n.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function fmtCost(n) {
+  if (!isFinite(n)) return '∞';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M g';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K g';
+  return Math.round(n).toLocaleString() + ' g';
+}
+
+function fmtPct(p) {
+  if (p === 0) return '0%';
+  if (p >= 0.001)    return (p * 100).toFixed(3) + '%';
+  if (p >= 0.000001) return (p * 100).toFixed(6) + '%';
+  return p.toExponential(3);
+}
+
+// ── Markov engine (pure, no DOM access) ──────────────────────────────────────
+// keepSets: { [tier]: Set<quality> }  — missing tier = keep all
+
+function runMarkov(targetTier, targetQuality, keepSets) {
+  let dist = applyTransition({ Uncommon: 1.0 }); // after T1→T2, no filter
+
+  const survivalRates = { 1: 1.0, 2: 1.0 };
+
+  for (let t = 2; t <= targetTier - 1; t++) {
+    const keepSet = keepSets[t] ?? new Set(TIER_QUALITIES[t]);
+    const filteredDist = {};
+    let kept = 0;
+    for (const q of QUALITIES) {
+      if (keepSet.has(q) && (dist[q] || 0) > 0) {
+        filteredDist[q] = dist[q];
+        kept += dist[q];
+      }
+    }
+    survivalRates[t + 1] = kept;
+    dist = applyTransition(filteredDist);
+  }
+
+  const pTarget = dist[targetQuality] || 0;
+  const expectedChains = pTarget > 0 ? 1 / pTarget : Infinity;
+
+  let totalCost = 0;
+  let totalCrafts = 0;
+  const tierCrafts = {};
+  for (let t = 1; t <= targetTier; t++) {
+    const crafts = (survivalRates[t] ?? 0) * expectedChains;
+    tierCrafts[t] = crafts;
+    totalCrafts += crafts;
+    totalCost += crafts * costPerCraft(t);
+  }
+
+  return { dist, survivalRates, pTarget, expectedChains, totalCost, totalCrafts, tierCrafts };
+}
+
+// ── Optimizer ─────────────────────────────────────────────────────────────────
+// Optimal strategy is always a threshold: upgrade all qualities ≥ some minimum.
+// (Same upgrade cost regardless of quality; higher quality → strictly better expected value.)
+// We enumerate all per-tier threshold combinations.
+
+function optimize(targetTier, targetQuality) {
+  const intermediateTiers = [];
+  for (let t = 2; t <= targetTier - 1; t++) intermediateTiers.push(t);
+
+  let bestCost = Infinity;
+  let bestKeepSets = null;
+
+  function enumerate(idx, keepSets) {
+    if (idx === intermediateTiers.length) {
+      const { totalCost } = runMarkov(targetTier, targetQuality, keepSets);
+      if (totalCost < bestCost) {
+        bestCost = totalCost;
+        bestKeepSets = {};
+        for (const [k, v] of Object.entries(keepSets)) bestKeepSets[k] = new Set(v);
+      }
+      return;
+    }
+    const t = intermediateTiers[idx];
+    const qs = TIER_QUALITIES[t];
+    // Threshold i = keep qualities from index i onward (0 = keep all)
+    for (let i = 0; i < qs.length; i++) {
+      keepSets[t] = new Set(qs.slice(i));
+      enumerate(idx + 1, keepSets);
+    }
+    delete keepSets[t];
+  }
+
+  enumerate(0, {});
+  return { keepSets: bestKeepSets, cost: bestCost };
+}
+
+// ── Rarity dropdown ───────────────────────────────────────────────────────────
+
+function buildRarityDropdown() {
+  const targetTier = parseInt(document.getElementById('target-tier').value);
+  const sel = document.getElementById('target-rarity');
+  const prev = sel.value;
+  sel.innerHTML = '';
+  const qs = TIER_QUALITIES[targetTier] || [];
+  for (const q of qs) {
+    const opt = document.createElement('option');
+    opt.value = q;
+    opt.textContent = q;
+    sel.appendChild(opt);
+  }
+  sel.value = qs.includes(prev) ? prev : qs[qs.length - 1];
+  updateRarityColor();
+}
+
+function updateRarityColor() {
+  const sel = document.getElementById('target-rarity');
+  sel.className = `q-${sel.value}`;
+}
+
+// ── Filter UI ─────────────────────────────────────────────────────────────────
+
+function buildFilters() {
+  const targetTier = parseInt(document.getElementById('target-tier').value);
+  const container  = document.getElementById('filter-container');
+  container.innerHTML = '';
+
+  if (targetTier <= 2) {
+    container.innerHTML = '<span class="hint">No intermediate tiers to filter.</span>';
+    return;
+  }
+
+  for (let t = 2; t <= targetTier - 1; t++) {
+    const section = document.createElement('div');
+    section.className = 'filter-tier';
+
+    const lbl = document.createElement('div');
+    lbl.className = 'filter-tier-label';
+    lbl.textContent = `T${t} — ${STEP_DATA[t].tool}`;
+    section.appendChild(lbl);
+
+    const chips = document.createElement('div');
+    chips.className = 'filter-chips';
+
+    for (const q of TIER_QUALITIES[t] || []) {
+      const label = document.createElement('label');
+      label.className = `q-chip ${q}`;
+      label.title = `Upgrade T${t} ${q} tools to T${t + 1}`;
+
+      const cb = document.createElement('input');
+      cb.type    = 'checkbox';
+      cb.id      = `keep-t${t}-${q}`;
+      cb.checked = true;
+      cb.addEventListener('change', () => {
+        label.classList.toggle('unchecked', !cb.checked);
+        document.getElementById('optimize-note').textContent = '';
+        calculate();
+      });
+
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(q));
+      chips.appendChild(label);
+    }
+
+    section.appendChild(chips);
+    container.appendChild(section);
+  }
+}
+
+function readKeepSets(targetTier) {
+  const keepSets = {};
+  for (let t = 2; t <= targetTier - 1; t++) {
+    keepSets[t] = new Set();
+    for (const q of TIER_QUALITIES[t] || []) {
+      const cb = document.getElementById(`keep-t${t}-${q}`);
+      if (cb && cb.checked) keepSets[t].add(q);
+    }
+  }
+  return keepSets;
+}
+
+function applyKeepSetsToUI(targetTier, keepSets) {
+  for (let t = 2; t <= targetTier - 1; t++) {
+    for (const q of TIER_QUALITIES[t] || []) {
+      const cb    = document.getElementById(`keep-t${t}-${q}`);
+      const label = cb?.closest('label');
+      if (!cb) continue;
+      const checked = (keepSets[t] ?? new Set(TIER_QUALITIES[t])).has(q);
+      cb.checked = checked;
+      label?.classList.toggle('unchecked', !checked);
+    }
+  }
+}
+
+// ── Calculate (render) ────────────────────────────────────────────────────────
+
+function calculate() {
+  const targetTier    = parseInt(document.getElementById('target-tier').value);
+  const targetQuality = document.getElementById('target-rarity').value;
+  const keepSets      = readKeepSets(targetTier);
+
+  const { dist, survivalRates, pTarget, expectedChains, totalCost, totalCrafts, tierCrafts }
+    = runMarkov(targetTier, targetQuality, keepSets);
+
+  const qColor = Q_COLOR[targetQuality] || 'var(--fg)';
+
+  // ── Summary title & metrics ──
+  document.getElementById('summary-title').innerHTML =
+    `Expected Cost — 1 <span style="color:${qColor}">${targetQuality}</span> ${STEP_DATA[targetTier].tool}`;
+  document.getElementById('m-prob-label').textContent = `P(${targetQuality}) per chain`;
+
+  const setMetric = (id, val, color) => {
+    const el = document.getElementById(id);
+    el.textContent = val;
+    el.style.color = color || '';
+    el.className   = 'metric-val' + (val === '∞' ? ' impossible' : '');
+  };
+
+  setMetric('m-chains',       pTarget > 0 ? fmt(expectedChains) : '∞', pTarget > 0 ? qColor : '');
+  setMetric('m-prob',         fmtPct(pTarget), pTarget > 0 ? qColor : '');
+  setMetric('m-total-crafts', pTarget > 0 ? fmt(totalCrafts) : '∞');
+  setMetric('m-total-cost',   pTarget > 0 ? fmtCost(totalCost) : '∞', pTarget > 0 ? qColor : '');
+
+  // ── Materials table ──
+  const tbody = document.getElementById('results-body');
+  tbody.innerHTML = '';
+
+  let totIngots = 0, totRope = 0, totPlank = 0, totLeather = 0, totCost = 0;
+
+  for (let t = 1; t <= targetTier; t++) {
+    const step   = STEP_DATA[t];
+    const crafts = tierCrafts[t] || 0;
+    const ingots  = crafts * step.ingotQty;
+    const rope    = crafts * 2;
+    const plank   = crafts * 2;
+    const leather = crafts * 2;
+    const cpc     = costPerCraft(t);
+    const tierCost = crafts * cpc;
+
+    totIngots  += ingots;
+    totRope    += rope;
+    totPlank   += plank;
+    totLeather += leather;
+    totCost    += tierCost;
+
+    const missingPrice = !hasPrices(t);
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="tier-label">T${t}</span></td>
+      <td>
+        <span class="tier-label">${step.tool}</span>
+        <span class="sub-label">${step.action}</span>
+      </td>
+      <td class="num">${fmt(crafts)}</td>
+      <td class="num" style="color:var(--fg-dim)">${((survivalRates[t] ?? 0) * 100).toFixed(1)}%</td>
+      <td class="num">${fmt(ingots)}<span class="mat-name">${step.ingot}</span></td>
+      <td class="num">${fmt(rope)}<span class="mat-name">${step.rope}</span></td>
+      <td class="num">${fmt(plank)}<span class="mat-name">${step.plank}</span></td>
+      <td class="num">${fmt(leather)}<span class="mat-name">${step.leather}</span></td>
+      <td class="num">${missingPrice ? '—' : fmtCost(cpc)}</td>
+      <td class="num" style="color:${qColor}">${missingPrice ? '—' : fmtCost(tierCost)}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  const totRow = document.createElement('tr');
+  totRow.className = 'totals-row';
+  totRow.innerHTML = `
+    <td colspan="2">Total</td>
+    <td class="num">${fmt(totalCrafts)}</td>
+    <td class="num">—</td>
+    <td class="num">${fmt(totIngots)}</td>
+    <td class="num">${fmt(totRope)}</td>
+    <td class="num">${fmt(totPlank)}</td>
+    <td class="num">${fmt(totLeather)}</td>
+    <td class="num">—</td>
+    <td class="num" style="color:${qColor}">${fmtCost(totCost)}</td>`;
+  tbody.appendChild(totRow);
+
+  // ── Quality distribution ──
+  const breakdown = document.getElementById('prob-breakdown');
+  breakdown.innerHTML = '';
+  let shown = 0;
+  for (const q of QUALITIES) {
+    const p = dist[q] || 0;
+    if (p < 1e-12) continue;
+    shown++;
+    const isTarget = q === targetQuality;
+    const row = document.createElement('div');
+    row.className = 'prob-row' + (isTarget ? ' is-target' : '');
+    row.innerHTML = `
+      <span class="prob-q" style="color:${Q_COLOR[q]||'var(--fg)'}">${q}</span>
+      <span class="prob-pct">${fmtPct(p)} &nbsp;(1 in ${fmt(1 / p)})</span>`;
+    breakdown.appendChild(row);
+  }
+  if (!shown) breakdown.innerHTML = '<span style="color:var(--fg-dim);font-size:12px">No reachable qualities — check filters.</span>';
+}
+
+// ── Optimize button ───────────────────────────────────────────────────────────
+
+document.getElementById('btn-optimize').addEventListener('click', () => {
+  const targetTier    = parseInt(document.getElementById('target-tier').value);
+  const targetQuality = document.getElementById('target-rarity').value;
+
+  const { keepSets, cost } = optimize(targetTier, targetQuality);
+
+  if (!keepSets) {
+    document.getElementById('optimize-note').textContent = 'No valid filter found.';
+    return;
+  }
+
+  applyKeepSetsToUI(targetTier, keepSets);
+  calculate();
+
+  // Describe the optimal thresholds
+  const parts = [];
+  for (let t = 2; t <= targetTier - 1; t++) {
+    const qs = TIER_QUALITIES[t];
+    const kept = keepSets[t] ?? new Set(qs);
+    const threshold = qs.find(q => kept.has(q)) ?? 'none';
+    parts.push(`T${t}: ${threshold}+`);
+  }
+  document.getElementById('optimize-note').textContent =
+    `Optimal: ${parts.join(' · ')} → ${fmtCost(cost)}`;
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+document.getElementById('target-tier').addEventListener('change', () => {
+  buildRarityDropdown();
+  buildFilters();
+  document.getElementById('optimize-note').textContent = '';
+  calculate();
+});
+
+document.getElementById('target-rarity').addEventListener('change', () => {
+  updateRarityColor();
+  document.getElementById('optimize-note').textContent = '';
+  calculate();
+});
+
+buildRarityDropdown();
+buildFilters();
+loadPrices(); // async; calls calculate() when done
+</script>
+
+</body>
+</html>

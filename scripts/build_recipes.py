@@ -29,10 +29,32 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 API_BASE   = 'https://bitjita.com'
 HEADERS    = {'User-Agent': 'BitJita (Billard)', 'Accept': 'application/json'}
-OUT_FILE   = Path(__file__).parent.parent / 'data' / 'recipes.json'
+OUT_FILE        = Path(__file__).parent.parent / 'data' / 'recipes.json'
+TOOL_PRICES_FILE = Path(__file__).parent.parent / 'data' / 'tool_prices.json'
 MAX_WORKERS = 10          # concurrent HTTP connections
 RATE_LIMIT  = 240         # req/min — comfortably under the 250 cap
 BURST       = 15          # token bucket burst size
+
+# Ingredient IDs for every tool upgrade step (T1 craft through T7→T8).
+# These are always refreshed so tool_prices.json stays current.
+TOOL_INGREDIENT_IDS = [
+    # T1 initial craft
+    '1050001', '1090004', '1020003', '1070004',
+    # T1→T2  (Pyrelite)
+    '2050001', '2090004', '2020003', '2070004',
+    # T2→T3  (Emarium)
+    '3050001', '3090004', '3020003', '3070004',
+    # T3→T4  (Elenvar)
+    '4050001', '4090004', '4020003', '4070004',
+    # T4→T5  (Luminite)
+    '5050001', '5090004', '5020003', '5070004',
+    # T5→T6  (Rathium)
+    '6050001', '6090004', '6020003', '6070004',
+    # T6→T7  (Aurumite)
+    '1899017490', '625147590', '1639308227', '806992520',
+    # T7→T8  (Celestium)
+    '1464752960', '1224328894', '28056473', '1743778001',
+]
 
 
 # ── Rate limiter ────────────────────────────────────────────────────────────
@@ -279,6 +301,32 @@ def main():
     print(f'  Ingredients  : {n_ing}')
     print(f'  Built at     : {updated["__meta__"]["built_at"]}')
     print(f'Written to {OUT_FILE}')
+
+    # ── Tool prices pass (always fresh, not cached) ──────────────────────────
+    print(f'\nTool prices — fetching {len(TOOL_INGREDIENT_IDS)} ingredient items…')
+    t0 = time.monotonic()
+    tool_prices = {}
+    errors = 0
+    for iid in TOOL_INGREDIENT_IDS:
+        try:
+            _bucket.acquire()
+            d = api_get(f'/api/items/{iid}')
+            stats = d.get('marketStats') or {}
+            tool_prices[iid] = {
+                'name':            d['item']['name'],
+                'medianSellPrice': stats.get('medianSellPrice'),
+                'lowestSellPrice': stats.get('lowestSellPrice'),
+                'medianBuyPrice':  stats.get('medianBuyPrice'),
+                'totalSellOrders': stats.get('totalSellOrders'),
+                'totalBuyOrders':  stats.get('totalBuyOrders'),
+            }
+        except Exception as e:
+            errors += 1
+            print(f'  ✗ {iid}: {e}')
+
+    tool_prices['__meta__'] = {'built_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
+    TOOL_PRICES_FILE.write_text(json.dumps(tool_prices))
+    print(f'  Done in {time.monotonic()-t0:.1f}s ({errors} errors). Written to {TOOL_PRICES_FILE}')
 
 
 if __name__ == '__main__':
