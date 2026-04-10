@@ -423,14 +423,14 @@ function runMarkov(targetTier, targetQuality, keepSets) {
 // We enumerate all per-tier threshold combinations.
 
 function optimize(targetTier, targetQuality) {
-  const intermediateTiers = [];
-  for (let t = 2; t <= targetTier - 1; t++) intermediateTiers.push(t);
-
   let bestCost = Infinity;
   let bestKeepSets = null;
 
-  function enumerate(idx, keepSets) {
-    if (idx === intermediateTiers.length) {
+  // T1 always Uncommon; T2 reachable = transition targets of Uncommon
+  const initialReachable = new Set(Object.keys(TRANSITION['Uncommon']));
+
+  function enumerate(t, keepSets, reachableAtT) {
+    if (t >= targetTier) {
       const { totalCost } = runMarkov(targetTier, targetQuality, keepSets);
       if (totalCost < bestCost) {
         bestCost = totalCost;
@@ -439,18 +439,46 @@ function optimize(targetTier, targetQuality) {
       }
       return;
     }
-    const t = intermediateTiers[idx];
-    const qs = TIER_QUALITIES[t];
-    // Threshold i = keep qualities from index i onward (0 = keep all)
+    const qs = QUALITIES.filter(q => reachableAtT.has(q));
+    if (qs.length === 0) { enumerate(t + 1, keepSets, new Set()); return; }
     for (let i = 0; i < qs.length; i++) {
-      keepSets[t] = new Set(qs.slice(i));
-      enumerate(idx + 1, keepSets);
+      const kept = new Set(qs.slice(i));
+      keepSets[t] = kept;
+      // Compute reachable at t+1 from kept
+      const nextReachable = new Set();
+      for (const q of kept) {
+        for (const nextQ of Object.keys(TRANSITION[q] ?? {})) {
+          if ((TIER_QUALITIES[t + 1] ?? []).includes(nextQ)) nextReachable.add(nextQ);
+        }
+      }
+      enumerate(t + 1, keepSets, nextReachable);
     }
     delete keepSets[t];
   }
 
-  enumerate(0, {});
+  enumerate(2, {}, initialReachable);
   return { keepSets: bestKeepSets, cost: bestCost };
+}
+
+function computeReachable(targetTier, keepSets) {
+  // Returns {tier: Set<quality>} for tiers 2..targetTier
+  const reachable = {};
+  let current = new Set(Object.keys(TRANSITION['Uncommon'])); // T2 always {Uncommon, Rare}
+  reachable[2] = current;
+  for (let t = 2; t <= targetTier - 1; t++) {
+    const kept = keepSets[t]
+      ? new Set([...current].filter(q => keepSets[t].has(q)))
+      : current;
+    const next = new Set();
+    for (const q of kept) {
+      for (const nextQ of Object.keys(TRANSITION[q] ?? {})) {
+        if ((TIER_QUALITIES[t + 1] ?? []).includes(nextQ)) next.add(nextQ);
+      }
+    }
+    reachable[t + 1] = next;
+    current = next;
+  }
+  return reachable;
 }
 
 // ── Rarity dropdown ───────────────────────────────────────────────────────────
@@ -491,17 +519,46 @@ function updateRarityColor() {
 
 // ── Filter UI ─────────────────────────────────────────────────────────────────
 
-function buildFilters() {
-  const targetTier = parseInt(document.getElementById('target-tier').value);
+function buildFilters(forcedStates = null) {
+  const tierVal = document.getElementById('target-tier').value;
+  if (!tierVal) { document.getElementById('filter-container').innerHTML = ''; return; }
+  const targetTier = parseInt(tierVal);
   const container  = document.getElementById('filter-container');
-  container.innerHTML = '';
 
+  // 1. Save current checkbox states before wiping DOM
+  const savedStates = {};
+  for (let t = 2; t <= targetTier - 1; t++) {
+    savedStates[t] = {};
+    for (const q of TIER_QUALITIES[t] || []) {
+      const cb = document.getElementById(`keep-t${t}-${q}`);
+      if (cb) savedStates[t][q] = cb.checked;
+    }
+  }
+
+  // 2. Build keepSets for reachability computation
+  const keepSets = {};
+  for (let t = 2; t <= targetTier - 1; t++) {
+    if (forcedStates) {
+      keepSets[t] = forcedStates[t] ?? new Set(TIER_QUALITIES[t]);
+    } else {
+      keepSets[t] = new Set(
+        (TIER_QUALITIES[t] || []).filter(q => savedStates[t]?.[q] !== false)
+      );
+    }
+  }
+
+  // 3. Compute reachable qualities per tier
+  const reachable = computeReachable(targetTier, keepSets);
+
+  // 4. Rebuild chips
+  container.innerHTML = '';
   if (targetTier <= 2) {
     container.innerHTML = '<span class="hint">No intermediate tiers to filter.</span>';
     return;
   }
 
   for (let t = 2; t <= targetTier - 1; t++) {
+    const reachableQs = reachable[t] ?? new Set();
     const section = document.createElement('div');
     section.className = 'filter-tier';
 
@@ -514,6 +571,8 @@ function buildFilters() {
     chips.className = 'filter-chips';
 
     for (const q of TIER_QUALITIES[t] || []) {
+      if (!reachableQs.has(q)) continue;
+
       const label = document.createElement('label');
       label.className = `q-chip ${q}`;
       label.title = `Upgrade T${t} ${q} tools to T${t + 1}`;
@@ -521,10 +580,13 @@ function buildFilters() {
       const cb = document.createElement('input');
       cb.type    = 'checkbox';
       cb.id      = `keep-t${t}-${q}`;
-      cb.checked = true;
+      cb.checked = forcedStates ? (forcedStates[t]?.has(q) ?? true) : (savedStates[t]?.[q] ?? true);
+      if (!cb.checked) label.classList.add('unchecked');
+
       cb.addEventListener('change', () => {
         label.classList.toggle('unchecked', !cb.checked);
         document.getElementById('optimize-note').textContent = '';
+        buildFilters();
         calculate();
       });
 
@@ -682,7 +744,7 @@ document.getElementById('btn-optimize').addEventListener('click', () => {
     return;
   }
 
-  applyKeepSetsToUI(targetTier, keepSets);
+  buildFilters(keepSets);
   calculate();
 
   // Describe the optimal thresholds
