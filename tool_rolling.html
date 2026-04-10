@@ -160,6 +160,14 @@
         <label>Quality</label>
         <select id="target-rarity"></select>
       </div>
+      <div class="field">
+        <label>Confidence</label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" id="confidence-pct" min="1" max="99" value="90"
+            style="width:58px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--fg);padding:4px 6px;font-size:13px">
+          <span style="color:var(--fg-dim);font-size:13px">%</span>
+        </div>
+      </div>
     </div>
 
     <div class="card">
@@ -178,11 +186,15 @@
       <div class="metrics-row">
         <div class="metric-box">
           <div class="metric-val" id="m-chains">—</div>
-          <div class="metric-label">T1 Crafts</div>
+          <div class="metric-label">Exp. Chains</div>
         </div>
         <div class="metric-box">
           <div class="metric-val" id="m-prob">—</div>
           <div class="metric-label" id="m-prob-label">P(target) per chain</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-val" id="m-conf-chains">—</div>
+          <div class="metric-label" id="m-conf-label">Chains at 90%</div>
         </div>
         <div class="metric-box">
           <div class="metric-val" id="m-total-crafts">—</div>
@@ -651,10 +663,15 @@ function calculate() {
     el.className   = 'metric-val' + (val === '∞' ? ' impossible' : '');
   };
 
+  const confPct = Math.max(1, Math.min(99, parseFloat(document.getElementById('confidence-pct').value) || 90));
+  const nChainsConf = pTarget > 0 ? Math.ceil(Math.log(1 - confPct / 100) / Math.log(1 - pTarget)) : Infinity;
+
   setMetric('m-chains',       pTarget > 0 ? fmt(expectedChains) : '∞', pTarget > 0 ? qColor : '');
   setMetric('m-prob',         fmtPct(pTarget), pTarget > 0 ? qColor : '');
+  setMetric('m-conf-chains',  pTarget > 0 ? fmt(nChainsConf) : '∞', pTarget > 0 ? qColor : '');
   setMetric('m-total-crafts', pTarget > 0 ? fmt(totalCrafts) : '∞');
   setMetric('m-total-cost',   pTarget > 0 ? fmtCost(totalCost) : '∞', pTarget > 0 ? qColor : '');
+  document.getElementById('m-conf-label').textContent = `Chains at ${confPct}%`;
 
   // ── Materials table ──
   const tbody = document.getElementById('results-body');
@@ -773,6 +790,8 @@ document.getElementById('target-rarity').addEventListener('change', () => {
   document.getElementById('optimize-note').textContent = '';
   calculate();
 });
+
+document.getElementById('confidence-pct').addEventListener('input', () => calculate());
 
 buildRarityDropdown();
 buildFilters();
