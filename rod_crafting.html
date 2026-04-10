@@ -152,6 +152,8 @@
           <option value="6">T6 — Rathium Tool</option>
           <option value="7">T7 — Aurumite Tool</option>
           <option value="8">T8 — Celestium Tool</option>
+          <option value="9">T9 — Umbracite Tool</option>
+          <option value="10">T10 — Astralite Tool</option>
         </select>
       </div>
       <div class="field">
@@ -239,6 +241,8 @@ const TIER_QUALITIES = {
   6: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
   7: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
   8: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  9: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  10: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
 };
 
 // Tier-invariant transition; Mythic absorbing (Rarity6 not implemented)
@@ -287,11 +291,21 @@ const STEP_DATA = {
        ropeId:'625147590',   rope:'Ornate Rope',
        plankId:'1639308227', plank:'Ornate Plank',
        leatherId:'806992520', leather:'Ornate Leather' },
-  8: { tool:'Celestium Tool', action:'Upgrade T7→T8',
+  8: { tool:'Celestium Tool',  action:'Upgrade T7→T8',
        ingotId:'1464752960', ingot:'Celestium Ingot', ingotQty:4,
        ropeId:'1224328894',  rope:'Pristine Rope',
        plankId:'28056473',   plank:'Pristine Plank',
        leatherId:'1743778001', leather:'Pristine Leather' },
+  9: { tool:'Umbracite Tool', action:'Upgrade T8→T9',
+       ingotId:'445742898',  ingot:'Umbracite Ingot', ingotQty:4,
+       ropeId:'471802228',   rope:'Magnificent Rope',
+       plankId:'1227914325', plank:'Magnificent Plank',
+       leatherId:'478917',   leather:'Magnificent Leather Treatment' },
+  10: { tool:'Astralite Tool', action:'Upgrade T9→T10',
+        ingotId:'2069757207', ingot:'Astralite Ingot', ingotQty:4,
+        ropeId:'547017087',   rope:'Flawless Rope',
+        plankId:'117329467',  plank:'Flawless Plank',
+        leatherId:'944952036', leather:'Flawless Leather Treatment' },
 };
 
 const Q_COLOR = {
