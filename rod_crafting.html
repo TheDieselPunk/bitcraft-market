@@ -104,6 +104,7 @@
     .tier-label { font-weight: 600; }
     .sub-label  { color: var(--fg-dim); font-size: 11px; display: block; }
     .mat-name   { color: var(--fg-dim); font-size: 10px; display: block; }
+    .mat-price  { color: var(--fg-dim); font-size: 10px; display: block; }
 
     /* Probability breakdown */
     .prob-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; font-size: 12px; border-bottom: 1px solid var(--border); }
@@ -596,10 +597,10 @@ function calculate() {
       </td>
       <td class="num">${fmt(crafts)}</td>
       <td class="num" style="color:var(--fg-dim)">${((survivalRates[t] ?? 0) * 100).toFixed(1)}%</td>
-      <td class="num">${fmt(ingots)}<span class="mat-name">${step.ingot}</span></td>
-      <td class="num">${fmt(rope)}<span class="mat-name">${step.rope}</span></td>
-      <td class="num">${fmt(plank)}<span class="mat-name">${step.plank}</span></td>
-      <td class="num">${fmt(leather)}<span class="mat-name">${step.leather}</span></td>
+      <td class="num">${fmt(ingots)}<span class="mat-name">${step.ingot}</span>${missingPrice ? '' : `<span class="mat-price">${fmtCost(prices[step.ingotId] ?? 0)} ea</span>`}</td>
+      <td class="num">${fmt(rope)}<span class="mat-name">${step.rope}</span>${missingPrice ? '' : `<span class="mat-price">${fmtCost(prices[step.ropeId] ?? 0)} ea</span>`}</td>
+      <td class="num">${fmt(plank)}<span class="mat-name">${step.plank}</span>${missingPrice ? '' : `<span class="mat-price">${fmtCost(prices[step.plankId] ?? 0)} ea</span>`}</td>
+      <td class="num">${fmt(leather)}<span class="mat-name">${step.leather}</span>${missingPrice ? '' : `<span class="mat-price">${fmtCost(prices[step.leatherId] ?? 0)} ea</span>`}</td>
       <td class="num">${missingPrice ? '—' : fmtCost(cpc)}</td>
       <td class="num" style="color:${qColor}">${missingPrice ? '—' : fmtCost(tierCost)}</td>`;
     tbody.appendChild(tr);
@@ -610,11 +611,11 @@ function calculate() {
   totRow.innerHTML = `
     <td colspan="2">Total</td>
     <td class="num">${fmt(totalCrafts)}</td>
-    <td class="num">—</td>
-    <td class="num">${fmt(totIngots)}</td>
-    <td class="num">${fmt(totRope)}</td>
-    <td class="num">${fmt(totPlank)}</td>
-    <td class="num">${fmt(totLeather)}</td>
+    <td class="num"></td>
+    <td class="num"></td>
+    <td class="num"></td>
+    <td class="num"></td>
+    <td class="num"></td>
     <td class="num">—</td>
     <td class="num" style="color:${qColor}">${fmtCost(totCost)}</td>`;
   tbody.appendChild(totRow);
