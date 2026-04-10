@@ -346,8 +346,6 @@ function applyTransition(dist) {
 
 function fmt(n, decimals = 0) {
   if (!isFinite(n)) return '∞';
-  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
   return n.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
