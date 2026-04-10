@@ -652,8 +652,6 @@ function calculate() {
   const qColor = Q_COLOR[targetQuality] || 'var(--fg)';
 
   // ── Summary title & metrics ──
-  document.getElementById('summary-title').innerHTML =
-    `Expected Cost — 1 <span style="color:${qColor}">${targetQuality}</span> ${STEP_DATA[targetTier].tool}`;
   document.getElementById('m-prob-label').textContent = `P(${targetQuality}) per chain`;
 
   const setMetric = (id, val, color) => {
@@ -665,12 +663,16 @@ function calculate() {
 
   const confPct = Math.max(1, Math.min(99, parseFloat(document.getElementById('confidence-pct').value) || 90));
   const nChainsConf = pTarget > 0 ? Math.ceil(Math.log(1 - confPct / 100) / Math.log(1 - pTarget)) : Infinity;
+  const confScale   = pTarget > 0 ? nChainsConf / expectedChains : 0;
+
+  document.getElementById('summary-title').innerHTML =
+    `At ${confPct}% Confidence — 1 <span style="color:${qColor}">${targetQuality}</span> ${STEP_DATA[targetTier].tool}`;
 
   setMetric('m-chains',       pTarget > 0 ? fmt(expectedChains) : '∞', pTarget > 0 ? qColor : '');
   setMetric('m-prob',         fmtPct(pTarget), pTarget > 0 ? qColor : '');
   setMetric('m-conf-chains',  pTarget > 0 ? fmt(nChainsConf) : '∞', pTarget > 0 ? qColor : '');
-  setMetric('m-total-crafts', pTarget > 0 ? fmt(totalCrafts) : '∞');
-  setMetric('m-total-cost',   pTarget > 0 ? fmtCost(totalCost) : '∞', pTarget > 0 ? qColor : '');
+  setMetric('m-total-crafts', pTarget > 0 ? fmt(totalCrafts * confScale) : '∞');
+  setMetric('m-total-cost',   pTarget > 0 ? fmtCost(totalCost * confScale) : '∞', pTarget > 0 ? qColor : '');
   document.getElementById('m-conf-label').textContent = `Chains at ${confPct}%`;
 
   // ── Materials table ──
@@ -681,7 +683,7 @@ function calculate() {
 
   for (let t = 1; t <= targetTier; t++) {
     const step   = STEP_DATA[t];
-    const crafts = tierCrafts[t] || 0;
+    const crafts = (survivalRates[t] ?? 0) * (pTarget > 0 ? nChainsConf : 0);
     const ingots  = crafts * step.ingotQty;
     const rope    = crafts * 2;
     const plank   = crafts * 2;
