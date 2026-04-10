@@ -115,6 +115,8 @@
     .prob-pct { color: var(--fg-dim); }
 
     .hint { font-size: 11px; color: var(--fg-dim); margin-bottom: 12px; line-height: 1.5; }
+    .formula-note { font-size: 11px; color: var(--fg-dim); margin-top: 10px; line-height: 1.6; font-family: monospace; }
+    .formula-note em { font-style: italic; color: var(--accent2); }
     .price-note { font-size: 10px; color: var(--fg-dim); margin-top: 10px; }
 
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -123,6 +125,10 @@
   </style>
 </head>
 <body>
+
+<div style="background:#f9e2af;color:#1e1e2e;text-align:center;padding:5px 12px;font-size:12px;font-weight:600;letter-spacing:.04em;">
+  🚧 Under Construction — data and features may change without notice
+</div>
 
 <header>
   <h1>Bitcraft Market Advisor</h1>
@@ -204,6 +210,11 @@
           <div class="metric-val" id="m-total-cost">—</div>
           <div class="metric-label">Est. Market Cost</div>
         </div>
+      </div>
+      <div class="formula-note">
+        n = ⌈ ln(1 − <em>c</em>) / ln(1 − <em>p</em>) ⌉ &nbsp;·&nbsp;
+        <em>c</em> = confidence &nbsp;·&nbsp; <em>p</em> = P(target) per chain &nbsp;·&nbsp;
+        table quantities at <span id="formula-conf">63</span>% confidence
       </div>
     </div>
 
@@ -674,6 +685,7 @@ function calculate() {
   setMetric('m-total-crafts', pTarget > 0 ? fmt(totalCrafts * confScale) : '∞');
   setMetric('m-total-cost',   pTarget > 0 ? fmtCost(totalCost * confScale) : '∞', pTarget > 0 ? qColor : '');
   document.getElementById('m-conf-label').textContent = `Chains at ${confPct}%`;
+  document.getElementById('formula-conf').textContent = confPct;
 
   // ── Materials table ──
   const tbody = document.getElementById('results-body');
