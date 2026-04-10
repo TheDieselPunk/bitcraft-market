@@ -144,13 +144,14 @@
       <div class="field">
         <label>Tier</label>
         <select id="target-tier">
+          <option value="" selected>— select tier —</option>
           <option value="2">T2 — Pyrelite Tool</option>
           <option value="3">T3 — Emarium Tool</option>
           <option value="4">T4 — Elenvar Tool</option>
           <option value="5">T5 — Luminite Tool</option>
           <option value="6">T6 — Rathium Tool</option>
           <option value="7">T7 — Aurumite Tool</option>
-          <option value="8" selected>T8 — Celestium Tool</option>
+          <option value="8">T8 — Celestium Tool</option>
         </select>
       </div>
       <div class="field">
@@ -163,7 +164,7 @@
       <div class="card-title">Upgrade Filters</div>
       <p class="hint">Which tool qualities to bother upgrading at each intermediate tier. Unchecked = scrap or sell instead.</p>
       <div id="filter-container"></div>
-      <button class="btn-optimize" id="btn-optimize" disabled>Optimize Filters for Cost</button>
+      <button class="btn-optimize" id="btn-optimize" disabled>Optimize Filters for Estimated Market Value</button>
       <div class="optimize-note" id="optimize-note"></div>
     </div>
   </div>
@@ -441,18 +442,31 @@ function optimize(targetTier, targetQuality) {
 // ── Rarity dropdown ───────────────────────────────────────────────────────────
 
 function buildRarityDropdown() {
-  const targetTier = parseInt(document.getElementById('target-tier').value);
+  const tierVal = document.getElementById('target-tier').value;
   const sel = document.getElementById('target-rarity');
   const prev = sel.value;
   sel.innerHTML = '';
+  if (!tierVal) {
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = '— select quality —';
+    sel.appendChild(blank);
+    updateRarityColor();
+    return;
+  }
+  const targetTier = parseInt(tierVal);
   const qs = TIER_QUALITIES[targetTier] || [];
+  const blankOpt = document.createElement('option');
+  blankOpt.value = '';
+  blankOpt.textContent = '— select quality —';
+  sel.appendChild(blankOpt);
   for (const q of qs) {
     const opt = document.createElement('option');
     opt.value = q;
     opt.textContent = q;
     sel.appendChild(opt);
   }
-  sel.value = qs.includes(prev) ? prev : qs[qs.length - 1];
+  sel.value = qs.includes(prev) ? prev : '';
   updateRarityColor();
 }
 
@@ -538,9 +552,11 @@ function applyKeepSetsToUI(targetTier, keepSets) {
 // ── Calculate (render) ────────────────────────────────────────────────────────
 
 function calculate() {
-  const targetTier    = parseInt(document.getElementById('target-tier').value);
+  const tierVal       = document.getElementById('target-tier').value;
   const targetQuality = document.getElementById('target-rarity').value;
-  const keepSets      = readKeepSets(targetTier);
+  if (!tierVal || !targetQuality) return;
+  const targetTier = parseInt(tierVal);
+  const keepSets   = readKeepSets(targetTier);
 
   const { dist, survivalRates, pTarget, expectedChains, totalCost, totalCrafts, tierCrafts }
     = runMarkov(targetTier, targetQuality, keepSets);
