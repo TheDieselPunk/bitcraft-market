@@ -48,11 +48,12 @@
       border-radius: 6px; padding: 7px 10px; color: var(--fg); font-size: 13px; outline: none;
     }
     .field select:focus { border-color: var(--accent); }
-    .field select.q-Uncommon  { color: #a6e3a1; border-color: #a6e3a1; }
-    .field select.q-Rare      { color: #89b4fa; border-color: #89b4fa; }
-    .field select.q-Epic      { color: #cba6f7; border-color: #cba6f7; }
-    .field select.q-Legendary { color: #f9e2af; border-color: #f9e2af; }
-    .field select.q-Mythic    { color: #f38ba8; border-color: #f38ba8; }
+    .field select.q-Common    { color: #6A7282; border-color: #6A7282; }
+    .field select.q-Uncommon  { color: #00C950; border-color: #00C950; }
+    .field select.q-Rare      { color: #2B7FFF; border-color: #2B7FFF; }
+    .field select.q-Epic      { color: #AD46FF; border-color: #AD46FF; }
+    .field select.q-Legendary { color: #FF6900; border-color: #FF6900; }
+    .field select.q-Mythic    { color: #D1D5DC; border-color: #D1D5DC; }
 
     .filter-tier { margin-bottom: 12px; }
     .filter-tier:last-child { margin-bottom: 0; }
@@ -66,11 +67,12 @@
     }
     .q-chip input { display: none; }
     .q-chip.unchecked { opacity: 0.3; }
-    .q-chip.Uncommon  { color: #a6e3a1; border-color: #a6e3a1; background: rgba(166,227,161,.08); }
-    .q-chip.Rare      { color: #89b4fa; border-color: #89b4fa; background: rgba(137,180,250,.08); }
-    .q-chip.Epic      { color: #cba6f7; border-color: #cba6f7; background: rgba(203,166,247,.08); }
-    .q-chip.Legendary { color: #f9e2af; border-color: #f9e2af; background: rgba(249,226,175,.08); }
-    .q-chip.Mythic    { color: #f38ba8; border-color: #f38ba8; background: rgba(243,139,168,.08); }
+    .q-chip.Common    { color: #6A7282; border-color: #6A7282; background: rgba(106,114,130,.08); }
+    .q-chip.Uncommon  { color: #00C950; border-color: #00C950; background: rgba(0,201,80,.08); }
+    .q-chip.Rare      { color: #2B7FFF; border-color: #2B7FFF; background: rgba(43,127,255,.08); }
+    .q-chip.Epic      { color: #AD46FF; border-color: #AD46FF; background: rgba(173,70,255,.08); }
+    .q-chip.Legendary { color: #FF6900; border-color: #FF6900; background: rgba(255,105,0,.08); }
+    .q-chip.Mythic    { color: #D1D5DC; border-color: #D1D5DC; background: rgba(209,213,220,.08); }
 
     /* Optimize button */
     .btn-optimize {
@@ -254,22 +256,23 @@
 <script>
 // ── Static data ──────────────────────────────────────────────────────────────
 
-const QUALITIES = ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'];
+const QUALITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'];
 
 const TIER_QUALITIES = {
-  2: ['Uncommon', 'Rare'],
-  3: ['Uncommon', 'Rare', 'Epic'],
-  4: ['Uncommon', 'Rare', 'Epic', 'Legendary'],
-  5: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
-  6: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
-  7: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
-  8: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
-  9: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
-  10: ['Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  2:  ['Common', 'Uncommon'],
+  3:  ['Common', 'Uncommon', 'Rare'],
+  4:  ['Common', 'Uncommon', 'Rare', 'Epic'],
+  5:  ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'],
+  6:  ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  7:  ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  8:  ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  9:  ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  10: ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
 };
 
-// Tier-invariant transition; Mythic absorbing (Rarity6 not implemented)
+// Tier-invariant transition; Mythic absorbing
 const TRANSITION = {
+  'Common':    { 'Common': 0.70,      'Uncommon': 0.30 },
   'Uncommon':  { 'Uncommon': 0.70,    'Rare': 0.30 },
   'Rare':      { 'Rare': 0.85,        'Epic': 0.15 },
   'Epic':      { 'Epic': 0.925,       'Legendary': 0.075 },
@@ -332,8 +335,8 @@ const STEP_DATA = {
 };
 
 const Q_COLOR = {
-  Uncommon:'#a6e3a1', Rare:'#89b4fa', Epic:'#cba6f7',
-  Legendary:'#f9e2af', Mythic:'#f38ba8',
+  Common:'#6A7282', Uncommon:'#00C950', Rare:'#2B7FFF',
+  Epic:'#AD46FF', Legendary:'#FF6900', Mythic:'#D1D5DC',
 };
 
 // ── Prices (loaded from tool_prices.json) ────────────────────────────────────
@@ -406,7 +409,7 @@ function fmtPct(p) {
 // keepSets: { [tier]: Set<quality> }  — missing tier = keep all
 
 function runMarkov(targetTier, targetQuality, keepSets) {
-  let dist = applyTransition({ Uncommon: 1.0 }); // after T1→T2, no filter
+  let dist = applyTransition({ Common: 1.0 }); // T1 initial craft always Common
 
   const survivalRates = { 1: 1.0, 2: 1.0 };
 
@@ -450,7 +453,7 @@ function optimize(targetTier, targetQuality) {
   let bestKeepSets = null;
 
   // T1 always Uncommon; T2 reachable = transition targets of Uncommon
-  const initialReachable = new Set(Object.keys(TRANSITION['Uncommon']));
+  const initialReachable = new Set(Object.keys(TRANSITION['Common']));
 
   function enumerate(t, keepSets, reachableAtT) {
     if (t >= targetTier) {
@@ -486,7 +489,7 @@ function optimize(targetTier, targetQuality) {
 function computeReachable(targetTier, keepSets) {
   // Returns {tier: Set<quality>} for tiers 2..targetTier
   const reachable = {};
-  let current = new Set(Object.keys(TRANSITION['Uncommon'])); // T2 always {Uncommon, Rare}
+  let current = new Set(Object.keys(TRANSITION['Common'])); // T2 always {Common, Uncommon}
   reachable[2] = current;
   for (let t = 2; t <= targetTier - 1; t++) {
     const kept = keepSets[t]
