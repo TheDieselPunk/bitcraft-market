@@ -1232,6 +1232,10 @@ function updateReCraftCard(targetTier, targetQuality, confPct) {
       `${(e.p * 100).toFixed(e.p >= 0.1 ? 2 : 3)}% ${qBadge(e.q)}`
     ).join(' &nbsp;/&nbsp; ');
 
+    // Show solvent cost even when scrap price is missing
+    const solventPartial = solventData ? fmtCost(solventQty * solventData.solventCost) : null;
+    const scrapPartial   = (scrapPrice != null) ? fmtCost(scrapQty * scrapPrice) : null;
+
     const tr = document.createElement('tr');
     if (isRelevant) tr.classList.add('recraft-target');
 
@@ -1239,9 +1243,9 @@ function updateReCraftCard(targetTier, targetQuality, confPct) {
       <td class="num"><strong>${fmt(scrapQty)}</strong><span class="mat-name">${s?.scrapName ?? ''}</span></td>
       <td class="num">${solventQty}</td>
       <td>${distHtml}</td>
-      <td class="num">${costData ? fmtCost(costData.scrapCost) : (scrapPrice == null ? '<span style="color:var(--fg-dim)">no data</span>' : '—')}</td>
-      <td class="num">${costData ? fmtCost(costData.solventCost) : (noPrices ? '<span style="color:var(--fg-dim)">no data</span>' : '—')}</td>
-      <td class="num">${costData ? fmtCost(costData.total) : '—'}</td>
+      <td class="num">${scrapPartial ?? '<span style="color:var(--fg-dim)">no listing</span>'}</td>
+      <td class="num">${solventPartial ?? '<span style="color:var(--fg-dim)">no data</span>'}</td>
+      <td class="num">${costData ? fmtCost(costData.total) : (solventPartial && !scrapPartial ? `≥${solventPartial}` : '—')}</td>
       <td class="num">${attemptsConf != null ? fmt(attemptsConf) : (isRelevant ? '—' : '<span style="color:var(--fg-dim)">n/a</span>')}</td>
       <td class="num">${totalConf != null ? fmtCost(totalConf) : (isRelevant ? '—' : '<span style="color:var(--fg-dim)">n/a</span>')}</td>`;
     tbody.appendChild(tr);
@@ -1266,15 +1270,21 @@ function updateReCraftCard(targetTier, targetQuality, confPct) {
     .filter(x => x.total != null)
     .sort((a, b) => a.total - b.total);
 
+  const canProduce = filteredOpts.some(([sc]) => {
+    const d = RECRAFT_DIST[sc];
+    return d && d.some(e => e.q === targetQuality && e.p > 0);
+  });
+
   if (bestRelevant.length > 0) {
     const best = bestRelevant[0];
     note.textContent =
       `Cheapest recraft path to ${targetQuality} at ${confPct}% confidence: ` +
       `${best.scrap} scrap + ${best.solv} solvent${best.solv > 1 ? 's' : ''} per attempt × ${fmt(best.att)} attempts = ${fmtCost(best.total)}.`;
+  } else if (canProduce) {
+    note.textContent =
+      `Highlighted rows can produce ${targetQuality}, but ${s?.scrapName ?? 'tool scrap'} has no market listings — total cost cannot be calculated.`;
   } else {
-    note.textContent = noPrices
-      ? 'No market data available to estimate recraft cost.'
-      : `No recraft option at T${targetTier} can produce ${targetQuality}.`;
+    note.textContent = `No recraft option at T${targetTier} can produce ${targetQuality}.`;
   }
 }
 
