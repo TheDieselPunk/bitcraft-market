@@ -273,10 +273,11 @@
               <th class="num">Leather</th>
               <th class="num">Cost/craft</th>
               <th class="num">Tier total cost</th>
+              <th class="num" id="recraft-col-hdr">Recraft cost</th>
             </tr>
           </thead>
           <tbody id="results-body">
-            <tr><td colspan="10" style="text-align:center;color:var(--fg-dim);padding:24px">Loading prices…</td></tr>
+            <tr><td colspan="11" style="text-align:center;color:var(--fg-dim);padding:24px">Loading prices…</td></tr>
           </tbody>
         </table>
       </div>
@@ -1049,6 +1050,42 @@ function computeSolventCost(tier) {
 }
 
 /**
+ * Find the cheapest recraft option at a given tier that can produce targetQuality.
+ * Returns { scrap, solvents, p, nAttempts, totalCost, partial } or null.
+ * partial=true means scrap price was missing; totalCost is solvent-only cost (minimum).
+ */
+function bestReCraftToQuality(tier, targetQuality, confPct) {
+  if (tier < 2) return null;
+  const opts = RECRAFT_TIERS[tier] ?? [];
+  const solventData = computeSolventCost(tier);
+  if (!solventData) return null;
+  const s = SOLVENT_DATA[tier];
+  const scrapPrice = s?.scrapId ? computePrice(s.scrapId) : null;
+
+  let best = null;
+  for (const [sc, sv] of opts) {
+    const dist = RECRAFT_DIST[sc];
+    if (!dist) continue;
+    const entry = dist.find(e => e.q === targetQuality);
+    if (!entry || entry.p <= 0) continue;
+
+    const nAttempts = Math.ceil(Math.log(1 - confPct / 100) / Math.log(1 - entry.p));
+    const solventPart = sv * solventData.solventCost;
+    const partial = scrapPrice == null;
+    const totalCost = partial
+      ? nAttempts * solventPart
+      : nAttempts * (sc * scrapPrice + solventPart);
+
+    if (best === null
+        || (!best.partial && totalCost < best.totalCost)
+        || (best.partial && partial && totalCost < best.totalCost)) {
+      best = { scrap: sc, solvents: sv, p: entry.p, nAttempts, totalCost, partial };
+    }
+  }
+  return best;
+}
+
+/**
  * Compute the cost of one recraft attempt at a given tier.
  * scrapQty × scrapPrice + solventQty × solventCost
  * Returns null if prices unavailable.
@@ -1322,7 +1359,12 @@ function calculate() {
 
   let totCost = 0;
   let totCrafts = 0;
+  let cumCost = 0;
   const tierCostData = [];
+
+  // Update recraft column header with target quality
+  const rcHdr = document.getElementById('recraft-col-hdr');
+  if (rcHdr) rcHdr.textContent = `Recraft → ${targetQuality}`;
 
   for (let t = 1; t <= targetTier; t++) {
     const step    = STEP_DATA[t];
@@ -1336,6 +1378,7 @@ function calculate() {
     const missing  = !hasPrices(t);
 
     totCost   += tierCost;
+    cumCost   += tierCost;
     totCrafts += crafts;
     tierCostData.push({ t, label: `T${t}`, cost: tierCost, hasPrices: !missing });
 
@@ -1343,6 +1386,28 @@ function calculate() {
     const pRope    = missing ? null : computePrice(step.ropeId);
     const pPlank   = missing ? null : computePrice(step.plankId);
     const pLeather = missing ? null : computePrice(step.leatherId);
+
+    // Recraft column: cheapest option to hit targetQuality at this tier
+    const rcBest = bestReCraftToQuality(t, targetQuality, confPct);
+    const canRecraft = t >= 2 && (RECRAFT_TIERS[t] ?? []).some(([sc]) => {
+      const d = RECRAFT_DIST[sc];
+      return d && d.some(e => e.q === targetQuality && e.p > 0);
+    });
+    let rcCell;
+    if (!canRecraft) {
+      rcCell = `<td class="num" style="color:var(--fg-dim)">—</td>`;
+    } else if (!rcBest) {
+      rcCell = `<td class="num" style="color:var(--fg-dim);font-size:11px">no price</td>`;
+    } else {
+      // Green if recraft is cheaper than re-rolling the entire chain up to this tier
+      const cheaper = !rcBest.partial && cumCost > 0 && rcBest.totalCost < cumCost;
+      const costStr = `${rcBest.partial ? '≥' : ''}${fmtCost(rcBest.totalCost)}`;
+      const attStr  = `${rcBest.nAttempts}× @ ${(rcBest.p * 100).toFixed(2)}%`;
+      rcCell = `<td class="num" title="vs cumulative chain cost ${fmtCost(cumCost)}">
+        <span style="color:${cheaper ? 'var(--green)' : 'inherit'}">${costStr}</span>
+        <span class="sub-label">${attStr}</span>
+      </td>`;
+    }
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -1358,7 +1423,8 @@ function calculate() {
       <td class="num">${fmt(plank)}<span class="mat-name">${step.plank}</span>${pPlank != null ? `<span class="mat-price">${fmtCost(pPlank)} ea</span>` : ''}</td>
       <td class="num">${fmt(leather)}<span class="mat-name">${step.leather}</span>${pLeather != null ? `<span class="mat-price">${fmtCost(pLeather)} ea</span>` : ''}</td>
       <td class="num">${missing ? '—' : fmtCost(cpc)}</td>
-      <td class="num">${missing ? '—' : fmtCost(tierCost)}</td>`;
+      <td class="num">${missing ? '—' : fmtCost(tierCost)}</td>
+      ${rcCell}`;
     tbody.appendChild(tr);
   }
 
@@ -1373,7 +1439,8 @@ function calculate() {
     <td class="num"></td>
     <td class="num"></td>
     <td class="num">—</td>
-    <td class="num">${fmtCost(totCost)}</td>`;
+    <td class="num">${fmtCost(totCost)}</td>
+    <td class="num"></td>`;
   tbody.appendChild(totRow);
 
   updateCharts(pTarget, nChainsConf, confPct, tierCostData);
