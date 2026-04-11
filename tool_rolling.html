@@ -558,8 +558,13 @@ function renderRegionGrid() {
     return;
   }
 
-  // Sort descending so the numpad layout shows higher IDs at top
-  const sorted = [...allRegions].sort((a, b) => b.id - a.id);
+  // Sort ascending, chunk into rows of 3, then reverse the row order so higher
+  // IDs appear at the top while each row reads left-to-right ascending (numpad style).
+  const asc = [...allRegions].sort((a, b) => a.id - b.id);
+  const rows = [];
+  for (let i = 0; i < asc.length; i += 3) rows.push(asc.slice(i, i + 3));
+  rows.reverse();
+  const sorted = rows.flat();
 
   for (const region of sorted) {
     const btn = document.createElement('button');
