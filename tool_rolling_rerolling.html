@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tool Rolling + Rerolling — Bitcraft</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #1e1e2e;
+      --surface:   #2a2a3e;
+      --surface2:  #313244;
+      --surface3:  #3a3a50;
+      --accent:    #cba6f7;
+      --accent2:   #89b4fa;
+      --green:     #a6e3a1;
+      --yellow:    #f9e2af;
+      --red:       #f38ba8;
+      --fg:        #cdd6f4;
+      --fg-dim:    #6c7086;
+      --border:    #45475a;
+    }
+
+    body { background: var(--bg); color: var(--fg); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 16px; color: var(--accent); font-weight: 700; }
+    header a  { color: var(--fg-dim); font-size: 12px; text-decoration: none; }
+    header a:hover { color: var(--fg); }
+    .nav-sep { color: var(--border); }
+
+    main {
+      max-width: 1500px; margin: 0 auto; padding: 20px 24px;
+      display: grid; grid-template-columns: 300px 1fr; gap: 20px;
+      align-items: start;
+    }
+    #chart-card-curve { display: flex; flex-direction: column; min-height: 150px; }
+    #chart-card-curve canvas { flex: 1; min-height: 0; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    .card:last-child { margin-bottom: 0; }
+    .card-title { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; font-weight: 600; }
+
+    .field { margin-bottom: 12px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label { display: block; font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+    .field select {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 7px 10px; color: var(--fg); font-size: 13px; outline: none;
+    }
+    .field select:focus { border-color: var(--accent); }
+
+    .pricing-modes { display: flex; flex-direction: column; gap: 6px; }
+    .pricing-mode-opt {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--surface2);
+      font-size: 12px; transition: border-color .15s;
+    }
+    .pricing-mode-opt:hover { border-color: var(--accent2); }
+    .pricing-mode-opt input[type=radio] { accent-color: var(--accent2); }
+    .pricing-mode-opt.selected { border-color: var(--accent2); }
+
+    .btn-refresh {
+      width: 100%; margin-top: 12px; padding: 7px;
+      background: var(--surface2); border: 1px solid var(--accent2);
+      color: var(--accent2); border-radius: 6px; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-refresh:hover:not(:disabled) { background: rgba(137,180,250,.12); }
+    .btn-refresh:disabled { border-color: var(--border); color: var(--fg-dim); cursor: not-allowed; }
+    .refresh-status { font-size: 10px; color: var(--fg-dim); margin-top: 6px; min-height: 14px; }
+
+    .region-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+    .region-btn {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 5px; padding: 5px 4px; font-size: 11px; font-weight: 600;
+      color: var(--fg-dim); cursor: pointer; text-align: center;
+      transition: border-color .1s, color .1s; user-select: none;
+    }
+    .region-btn:hover { border-color: var(--accent2); color: var(--fg); }
+    .region-btn.active { border-color: var(--accent2); color: var(--accent2); background: rgba(137,180,250,.1); }
+    .region-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+    .region-action-btn {
+      flex: 1; padding: 4px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; font-size: 10px; color: var(--fg-dim); cursor: pointer;
+    }
+    .region-action-btn:hover { color: var(--fg); border-color: var(--fg-dim); }
+
+    .filter-tier { margin-bottom: 12px; }
+    .filter-tier:last-child { margin-bottom: 0; }
+    .filter-tier-label { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+    .filter-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .q-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      border: 1px solid; border-radius: 4px; padding: 3px 8px;
+      font-size: 11px; font-weight: 600; cursor: pointer; user-select: none;
+      transition: opacity .15s;
+    }
+    .q-chip input { display: none; }
+    .q-chip.unchecked { opacity: 0.3; }
+    .q-chip.Common    { color: #6A7282; border-color: #6A7282; background: rgba(106,114,130,.08); }
+    .q-chip.Uncommon  { color: #00C950; border-color: #00C950; background: rgba(0,201,80,.08); }
+    .q-chip.Rare      { color: #2B7FFF; border-color: #2B7FFF; background: rgba(43,127,255,.08); }
+    .q-chip.Epic      { color: #AD46FF; border-color: #AD46FF; background: rgba(173,70,255,.08); }
+    .q-chip.Legendary { color: #FF6900; border-color: #FF6900; background: rgba(255,105,0,.08); }
+    .q-chip.Mythic    { color: #D1D5DC; border-color: #D1D5DC; background: rgba(209,213,220,.08); }
+
+    .btn-optimize {
+      width: 100%; margin-top: 14px; padding: 9px;
+      background: var(--surface2); border: 1px solid var(--accent);
+      color: var(--accent); border-radius: 6px; font-size: 13px; font-weight: 700;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-optimize:hover { background: rgba(203,166,247,.12); }
+    .btn-optimize:disabled { border-color: var(--border); color: var(--fg-dim); cursor: not-allowed; }
+    .optimize-note { font-size: 11px; color: var(--green); margin-top: 8px; min-height: 16px; }
+
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    thead tr { background: var(--surface2); }
+    th { padding: 8px 12px; text-align: left; font-size: 10px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+    th.num, td.num { text-align: right; }
+    tbody tr { border-top: 1px solid var(--border); }
+    tbody tr:hover { background: var(--surface2); }
+    td { padding: 8px 12px; white-space: nowrap; }
+    tbody tr.totals-row { border-top: 2px solid var(--border); background: var(--surface2); font-weight: 600; }
+
+    /* Recraft table highlight */
+    tbody tr.recraft-target { background: rgba(203,166,247,.07); }
+    tbody tr.recraft-target td:first-child { border-left: 3px solid var(--accent); }
+
+    .tier-label { font-weight: 600; }
+    .sub-label  { color: var(--fg-dim); font-size: 11px; display: block; }
+    .mat-name   { color: var(--fg-dim); font-size: 10px; display: block; }
+    .mat-price  { color: var(--fg-dim); font-size: 10px; display: block; }
+
+    .hint { font-size: 11px; color: var(--fg-dim); margin-bottom: 12px; line-height: 1.5; }
+    .formula-note { font-size: 11px; color: var(--fg-dim); margin-top: 10px; line-height: 1.6; font-family: monospace; }
+    .formula-note em { font-style: italic; color: var(--accent2); }
+    .price-note { font-size: 10px; color: var(--fg-dim); margin-top: 10px; }
+
+    /* Quality badge inline */
+    .q-badge {
+      display: inline-block; border: 1px solid; border-radius: 3px;
+      padding: 1px 5px; font-size: 10px; font-weight: 600; white-space: nowrap;
+    }
+    .q-badge.Common    { color: #6A7282; border-color: #6A7282; }
+    .q-badge.Uncommon  { color: #00C950; border-color: #00C950; }
+    .q-badge.Rare      { color: #2B7FFF; border-color: #2B7FFF; }
+    .q-badge.Epic      { color: #AD46FF; border-color: #AD46FF; }
+    .q-badge.Legendary { color: #FF6900; border-color: #FF6900; }
+    .q-badge.Mythic    { color: #D1D5DC; border-color: #D1D5DC; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<div style="background:#f9e2af;color:#1e1e2e;text-align:center;padding:5px 12px;font-size:12px;font-weight:600;letter-spacing:.04em;">
+  🚧 Under Construction — data and features may change without notice
+</div>
+
+<header>
+  <h1>Bitcraft Market Advisor</h1>
+  <span class="nav-sep">|</span>
+  <a href="index.html">Market</a>
+  <span class="nav-sep">|</span>
+  <a href="chain_calc.html">Chain Calc</a>
+  <span class="nav-sep">|</span>
+  <a href="equipment_sim.html">Equipment Sim</a>
+  <span class="nav-sep">|</span>
+  <a href="tool_rolling.html">Tool Rolling</a>
+  <span class="nav-sep">|</span>
+  <a href="tool_rolling_rerolling.html" style="color:var(--fg)">Tool Rerolling</a>
+</header>
+
+<main>
+  <!-- ── Left panel ── -->
+  <div>
+    <div class="card">
+      <div class="card-title">Target</div>
+      <div class="field">
+        <label>Tier</label>
+        <select id="target-tier">
+          <option value="" selected>— select tier —</option>
+          <option value="2">T2 — Pyrelite Tool</option>
+          <option value="3">T3 — Emarium Tool</option>
+          <option value="4">T4 — Elenvar Tool</option>
+          <option value="5">T5 — Luminite Tool</option>
+          <option value="6">T6 — Rathium Tool</option>
+          <option value="7">T7 — Aurumite Tool</option>
+          <option value="8">T8 — Celestium Tool</option>
+          <option value="9">T9 — Umbracite Tool</option>
+          <option value="10">T10 — Astralite Tool</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Quality</label>
+        <select id="target-rarity"></select>
+      </div>
+      <div class="field">
+        <label>Confidence</label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" id="confidence-pct" min="1" max="99" value="90"
+            style="width:58px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--fg);padding:4px 6px;font-size:13px">
+          <span style="color:var(--fg-dim);font-size:13px">%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Market Pricing</div>
+      <div class="field">
+        <label>Pricing Mode</label>
+        <div class="pricing-modes" id="pricing-modes">
+          <label class="pricing-mode-opt selected">
+            <input type="radio" name="pricing-mode" value="median" checked> Median Sell
+          </label>
+          <label class="pricing-mode-opt">
+            <input type="radio" name="pricing-mode" value="vwap"> Raw VWAP
+          </label>
+          <label class="pricing-mode-opt">
+            <input type="radio" name="pricing-mode" value="trimmed"> Trimmed VWAP
+          </label>
+          <label class="pricing-mode-opt">
+            <input type="radio" name="pricing-mode" value="fill"> Cost to Fill
+          </label>
+        </div>
+      </div>
+      <div class="field" style="margin-top:12px">
+        <label>Regions</label>
+        <div class="region-actions">
+          <button class="region-action-btn" id="btn-regions-all">All</button>
+          <button class="region-action-btn" id="btn-regions-none">None</button>
+        </div>
+        <div class="region-grid" id="region-grid">
+          <span style="color:var(--fg-dim);font-size:11px">Loading…</span>
+        </div>
+      </div>
+      <button class="btn-refresh" id="btn-refresh">↺ Refresh Market Data</button>
+      <div class="refresh-status" id="refresh-status"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Upgrade Filters</div>
+      <p class="hint">Which tool qualities to bother upgrading at each intermediate tier. Unchecked = scrap or sell instead.</p>
+      <div id="filter-container"></div>
+      <button class="btn-optimize" id="btn-optimize" disabled>Optimize Filters for Estimated Market Value</button>
+      <div class="optimize-note" id="optimize-note"></div>
+    </div>
+  </div>
+
+  <!-- ── Right panel ── -->
+  <div>
+    <div class="card">
+      <div class="card-title" id="summary-title">Material Requirements</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Tier</th>
+              <th>Tool</th>
+              <th class="num">Crafts</th>
+              <th class="num">% rolls</th>
+              <th class="num">Ingots</th>
+              <th class="num">Rope</th>
+              <th class="num">Plank</th>
+              <th class="num">Leather</th>
+              <th class="num">Cost/craft</th>
+              <th class="num">Tier total cost</th>
+            </tr>
+          </thead>
+          <tbody id="results-body">
+            <tr><td colspan="10" style="text-align:center;color:var(--fg-dim);padding:24px">Loading prices…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="price-note" id="price-note"></p>
+      <div class="formula-note">
+        n = ⌈ ln(1 − <em>c</em>) / ln(1 − <em>p</em>) ⌉ &nbsp;·&nbsp;
+        <em>c</em> = confidence &nbsp;·&nbsp; <em>p</em> = P(target) per tool roll &nbsp;·&nbsp;
+        table quantities at <span id="formula-conf">63</span>% confidence
+      </div>
+    </div>
+
+    <!-- ── Reforging Solvent cost ── -->
+    <div class="card" id="solvent-card" style="display:none">
+      <div class="card-title" id="solvent-title">Reforging Solvent Cost — T? (Crafted)</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Ingredient</th>
+              <th>Item</th>
+              <th class="num">Qty</th>
+              <th class="num">Price ea</th>
+              <th class="num">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody id="solvent-body"></tbody>
+        </table>
+      </div>
+      <p id="solvent-note" style="font-size:11px;color:var(--fg-dim);margin-top:10px"></p>
+    </div>
+
+    <!-- ── Recraft options ── -->
+    <div class="card" id="recraft-card" style="display:none">
+      <div class="card-title" id="recraft-title">Recraft Options — T?</div>
+      <p class="hint" id="recraft-hint"></p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="num">Scrap</th>
+              <th class="num">Solvents</th>
+              <th>Output distribution</th>
+              <th class="num">Scrap cost</th>
+              <th class="num">Solvent cost</th>
+              <th class="num">Total/attempt</th>
+              <th class="num">Attempts @ <span id="recraft-conf">90</span>%</th>
+              <th class="num">Total cost @ <span id="recraft-conf2">90</span>%</th>
+            </tr>
+          </thead>
+          <tbody id="recraft-body"></tbody>
+        </table>
+      </div>
+      <p id="recraft-note" style="font-size:11px;color:var(--fg-dim);margin-top:10px;line-height:1.6"></p>
+    </div>
+
+    <div class="card" id="chart-card-curve">
+      <div class="card-title">Cumulative Success Probability</div>
+      <div id="chart-empty" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--fg-dim);font-size:12px">Select a tier and quality to see the chart.</div>
+      <canvas id="chart-curve" style="display:none"></canvas>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── Static data ──────────────────────────────────────────────────────────────
+
+const QUALITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'];
+
+const TIER_QUALITIES = {
+  2:  ['Common', 'Uncommon'],
+  3:  ['Common', 'Uncommon', 'Rare'],
+  4:  ['Common', 'Uncommon', 'Rare', 'Epic'],
+  5:  ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'],
+  6:  ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  7:  ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  8:  ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  9:  ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+  10: ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'],
+};
+
+const TRANSITION = {
+  'Common':    { 'Common': 0.70,      'Uncommon': 0.30 },
+  'Uncommon':  { 'Uncommon': 0.70,    'Rare': 0.30 },
+  'Rare':      { 'Rare': 0.85,        'Epic': 0.15 },
+  'Epic':      { 'Epic': 0.925,       'Legendary': 0.075 },
+  'Legendary': { 'Legendary': 0.9625, 'Mythic': 0.0375 },
+  'Mythic':    { 'Mythic': 1.0 },
+};
+
+const STEP_DATA = {
+  1:  { tool:'Ferralith Tool',  action:'Initial craft',
+        ingotId:'1050001',    ingot:'Ferralith Ingot',              ingotQty:4,
+        ropeId:'1090004',     rope:'Rough Rope',
+        plankId:'1020003',    plank:'Rough Plank',
+        leatherId:'1070004',  leather:'Rough Leather' },
+  2:  { tool:'Pyrelite Tool',   action:'Upgrade T1→T2',
+        ingotId:'2050001',    ingot:'Pyrelite Ingot',               ingotQty:4,
+        ropeId:'2090004',     rope:'Simple Rope',
+        plankId:'2020003',    plank:'Simple Plank',
+        leatherId:'2070004',  leather:'Simple Leather' },
+  3:  { tool:'Emarium Tool',    action:'Upgrade T2→T3',
+        ingotId:'3050001',    ingot:'Emarium Ingot',                ingotQty:4,
+        ropeId:'3090004',     rope:'Sturdy Rope',
+        plankId:'3020003',    plank:'Sturdy Plank',
+        leatherId:'3070004',  leather:'Sturdy Leather' },
+  4:  { tool:'Elenvar Tool',    action:'Upgrade T3→T4',
+        ingotId:'4050001',    ingot:'Elenvar Ingot',                ingotQty:4,
+        ropeId:'4090004',     rope:'Fine Rope',
+        plankId:'4020003',    plank:'Fine Plank',
+        leatherId:'4070004',  leather:'Fine Leather' },
+  5:  { tool:'Luminite Tool',   action:'Upgrade T4→T5',
+        ingotId:'5050001',    ingot:'Luminite Ingot',               ingotQty:4,
+        ropeId:'5090004',     rope:'Exquisite Rope',
+        plankId:'5020003',    plank:'Exquisite Plank',
+        leatherId:'5070004',  leather:'Exquisite Leather' },
+  6:  { tool:'Rathium Tool',    action:'Upgrade T5→T6',
+        ingotId:'6050001',    ingot:'Rathium Ingot',                ingotQty:4,
+        ropeId:'6090004',     rope:'Peerless Rope',
+        plankId:'6020003',    plank:'Peerless Plank',
+        leatherId:'6070004',  leather:'Peerless Leather' },
+  7:  { tool:'Aurumite Tool',   action:'Upgrade T6→T7',
+        ingotId:'1899017490', ingot:'Aurumite Ingot',               ingotQty:4,
+        ropeId:'625147590',   rope:'Ornate Rope',
+        plankId:'1639308227', plank:'Ornate Plank',
+        leatherId:'806992520',leather:'Ornate Leather' },
+  8:  { tool:'Celestium Tool',  action:'Upgrade T7→T8',
+        ingotId:'1464752960', ingot:'Celestium Ingot',              ingotQty:4,
+        ropeId:'1224328894',  rope:'Pristine Rope',
+        plankId:'28056473',   plank:'Pristine Plank',
+        leatherId:'1743778001',leather:'Pristine Leather' },
+  9:  { tool:'Umbracite Tool',  action:'Upgrade T8→T9',
+        ingotId:'445742898',  ingot:'Umbracite Ingot',              ingotQty:4,
+        ropeId:'471802228',   rope:'Magnificent Rope',
+        plankId:'1227914325', plank:'Magnificent Plank',
+        leatherId:'478917',   leather:'Magnificent Leather Treatment' },
+  10: { tool:'Astralite Tool',  action:'Upgrade T9→T10',
+        ingotId:'2069757207', ingot:'Astralite Ingot',              ingotQty:4,
+        ropeId:'547017087',   rope:'Flawless Rope',
+        plankId:'117329467',  plank:'Flawless Plank',
+        leatherId:'944952036',leather:'Flawless Leather Treatment' },
+};
+
+const Q_COLOR = {
+  Common:'#6A7282', Uncommon:'#00C950', Rare:'#2B7FFF',
+  Epic:'#AD46FF', Legendary:'#FF6900', Mythic:'#D1D5DC',
+};
+
+// ── Rerolling data ───────────────────────────────────────────────────────────
+
+const STABILIZER_COST = 75; // fixed NPC price in Hex
+
+// Per-tier data for crafting Reforging Solvents.
+// Chemical Catalyst recipe: 2× Fish Oil + 10× cheapest-of-3 Seeds (market prices)
+// Reforging Solvent recipe:  1× Catalyst  + 1× Reforging Stabilizer (75 Hex NPC)
+const SOLVENT_DATA = {
+  2:  { prefix:'Simple',      solvId:'782755200',
+        fishOilId:'2110010',   fishOilName:'Simple Fish Oil',
+        seedIds:  ['2100005','2100008','2100015'],
+        seedNames:['Simple Embergrain Seeds','Simple Starbulb Seeds','Simple Wispweave Seeds'],
+        catalystId:'283591176',  catalystName:'Simple Chemical Catalyst',
+        scrapId:'915605880',   scrapName:'Simple Tool Scrap' },
+  3:  { prefix:'Infused',     solvId:'1014472344',
+        fishOilId:'3110010',   fishOilName:'Infused Fish Oil',
+        seedIds:  ['3100005','3100008','3100015'],
+        seedNames:['Infused Embergrain Seeds','Infused Starbulb Seeds','Infused Wispweave Seeds'],
+        catalystId:'1020188259', catalystName:'Infused Chemical Catalyst',
+        scrapId:'1135256162',  scrapName:'Sturdy Tool Scrap' },
+  4:  { prefix:'Fine',        solvId:'1866006436',
+        fishOilId:'4110010',   fishOilName:'Fine Fish Oil',
+        seedIds:  ['4100005','4100008','4100015'],
+        seedNames:['Fine Embergrain Seeds','Fine Starbulb Seeds','Fine Wispweave Seeds'],
+        catalystId:'98643046',   catalystName:'Fine Chemical Catalyst',
+        scrapId:'1056554024',  scrapName:'Fine Tool Scrap' },
+  5:  { prefix:'Exquisite',   solvId:'1336640512',
+        fishOilId:'5110010',   fishOilName:'Exquisite Fish Oil',
+        seedIds:  ['5100005','5100008','5100015'],
+        seedNames:['Exquisite Embergrain Seeds','Exquisite Starbulb Seeds','Exquisite Wispweave Seeds'],
+        catalystId:'1030159712', catalystName:'Exquisite Chemical Catalyst',
+        scrapId:'378818464',   scrapName:'Exquisite Tool Scrap' },
+  6:  { prefix:'Peerless',    solvId:'479733233',
+        fishOilId:'6110010',   fishOilName:'Peerless Fish Oil',
+        seedIds:  ['6100005','6100008','6100015'],
+        seedNames:['Peerless Embergrain Seeds','Peerless Starbulb Seeds','Peerless Wispweave Seeds'],
+        catalystId:'389773215',  catalystName:'Peerless Chemical Catalyst',
+        scrapId:'945955998',   scrapName:'Peerless Tool Scrap' },
+  7:  { prefix:'Ornate',      solvId:'1639666736',
+        fishOilId:'793439431', fishOilName:'Ornate Fish Oil',
+        seedIds:  ['1008417993','2115422084','53729166'],
+        seedNames:['Ornate Embergrain Seeds','Ornate Starbulb Seeds','Ornate Wispweave Seeds'],
+        catalystId:'1569513170', catalystName:'Ornate Chemical Catalyst',
+        scrapId:'785195103',   scrapName:'Ornate Tool Scrap' },
+  8:  { prefix:'Pristine',    solvId:'2081179538',
+        fishOilId:'9679815',   fishOilName:'Pristine Fish Oil',
+        seedIds:  ['1024977657','757946117','2129960803'],
+        seedNames:['Pristine Embergrain Seeds','Pristine Starbulb Seeds','Pristine Wispweave Seeds'],
+        catalystId:'1359102754', catalystName:'Pristine Chemical Catalyst',
+        scrapId:'1571207479',  scrapName:'Pristine Tool Scrap' },
+  9:  { prefix:'Magnificent', solvId:'1047477197',
+        fishOilId:'1491156124',fishOilName:'Magnificent Fish Oil',
+        seedIds:  ['2120609742','1537113956','1530487215'],
+        seedNames:['Magnificent Embergrain Seeds','Magnificent Starbulb Seeds','Magnificent Wispweave Seeds'],
+        catalystId:'1527038072', catalystName:'Magnificent Chemical Catalyst',
+        scrapId:'1769663933',  scrapName:'Magnificent Tool Scrap' },
+  10: { prefix:'Flawless',    solvId:'214980690',
+        fishOilId:'1096168904',fishOilName:'Flawless Fish Oil',
+        seedIds:  ['1239830729','21938971','1181587439'],
+        seedNames:['Flawless Embergrain Seeds','Flawless Starbulb Seeds','Flawless Wispweave Seeds'],
+        catalystId:'391105297',  catalystName:'Flawless Chemical Catalyst',
+        scrapId:'1083525875',  scrapName:'Flawless Tool Scrap' },
+};
+
+// Quality distributions per scrap quantity (tier-invariant, from game data).
+// Each entry: [scrap, solvents, [{q, p}, ...]]
+// Grouped by quality target pair — different scrap amounts can share the same distribution
+// because smaller tool types produce less scrap per scrap action.
+const RECRAFT_DIST = {
+    3: [{q:'Common',    p:0.70000},{q:'Uncommon',  p:0.30000}],
+    5: [{q:'Uncommon',  p:0.85000},{q:'Rare',      p:0.15000}],
+    9: [{q:'Common',    p:0.70000},{q:'Uncommon',  p:0.30000}],
+   15: [{q:'Rare',      p:0.92500},{q:'Epic',      p:0.07500}],
+   25: [{q:'Uncommon',  p:0.85000},{q:'Rare',      p:0.15000}],
+   30: [{q:'Epic',      p:0.96250},{q:'Legendary', p:0.03750}],
+   45: [{q:'Rare',      p:0.92500},{q:'Epic',      p:0.07500}],
+   50: [{q:'Legendary', p:0.98125},{q:'Mythic',    p:0.01875}],
+   75: [{q:'Rare',      p:0.92500},{q:'Epic',      p:0.07500}],
+   90: [{q:'Epic',      p:0.96250},{q:'Legendary', p:0.03750}],
+  150: [{q:'Legendary', p:0.98125},{q:'Mythic',    p:0.01875}],
+  250: [{q:'Legendary', p:0.98125},{q:'Mythic',    p:0.01875}],
+};
+
+// Recraft options available at each tier: [scrapQty, solventQty]
+// Options cap at the tier's max quality — e.g. T2 max is Uncommon, so only
+// options whose distribution includes ≥1 achievable quality are shown.
+const RECRAFT_TIERS = {
+  2:  [[3,1],[9,1],[15,1]],
+  3:  [[3,1],[5,1],[9,1],[15,1],[25,1]],
+  4:  [[3,1],[5,1],[9,1],[15,1],[25,1],[45,1],[75,1]],
+  5:  [[3,1],[5,1],[9,1],[15,1],[25,1],[30,1],[45,1],[75,1],[90,1]],
+  6:  [[3,1],[5,1],[9,1],[15,1],[25,1],[30,1],[45,1],[50,2],[75,1],[90,1],[150,1],[250,2]],
+};
+for (const t of [7,8,9,10]) RECRAFT_TIERS[t] = RECRAFT_TIERS[6];
+
+// ── Market data ───────────────────────────────────────────────────────────────
+
+let rawOrders = {};
+let marketFetchedAt = null;
+let lastRefreshTime = 0;
+let refreshCooldownTimer = null;
+
+let selectedRegions = null;
+let allRegions = [];
+
+function computePrice(itemId) {
+  let orders = rawOrders[itemId];
+  if (!orders || orders.length === 0) return null;
+
+  if (selectedRegions !== null && selectedRegions.size > 0) {
+    orders = orders.filter(o => selectedRegions.has(o.regionId));
+  } else if (selectedRegions !== null && selectedRegions.size === 0) {
+    return null;
+  }
+
+  if (orders.length === 0) return null;
+
+  const mode = document.querySelector('input[name="pricing-mode"]:checked')?.value || 'median';
+
+  if (mode === 'median') {
+    const sorted = [...orders].sort((a, b) => a.price - b.price);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+      ? (sorted[mid - 1].price + sorted[mid].price) / 2
+      : sorted[mid].price;
+  }
+
+  if (mode === 'vwap') {
+    let sumPQ = 0, sumQ = 0;
+    for (const o of orders) { sumPQ += o.price * o.qty; sumQ += o.qty; }
+    return sumQ > 0 ? sumPQ / sumQ : null;
+  }
+
+  if (mode === 'trimmed') {
+    const sorted = [...orders].sort((a, b) => a.price - b.price);
+    const mid = Math.floor(sorted.length / 2);
+    const median = sorted.length % 2 === 0
+      ? (sorted[mid - 1].price + sorted[mid].price) / 2
+      : sorted[mid].price;
+    const trimmed = orders.filter(o => o.price <= 3 * median);
+    if (trimmed.length === 0) return median;
+    let sumPQ = 0, sumQ = 0;
+    for (const o of trimmed) { sumPQ += o.price * o.qty; sumQ += o.qty; }
+    return sumQ > 0 ? sumPQ / sumQ : null;
+  }
+
+  if (mode === 'fill') {
+    const sorted = [...orders].sort((a, b) => a.price - b.price);
+    const TARGET_QTY = 10;
+    let sumPQ = 0, sumQ = 0;
+    for (const o of sorted) {
+      const take = Math.min(o.qty, TARGET_QTY - sumQ);
+      if (take <= 0) break;
+      sumPQ += o.price * take;
+      sumQ  += take;
+    }
+    return sumQ > 0 ? sumPQ / sumQ : null;
+  }
+
+  return null;
+}
+
+function hasPrices(t) {
+  const s = STEP_DATA[t];
+  return [s.ingotId, s.ropeId, s.plankId, s.leatherId].every(id => computePrice(id) != null);
+}
+
+function costPerCraft(t) {
+  const s = STEP_DATA[t];
+  const p = id => computePrice(id) ?? 0;
+  return s.ingotQty * p(s.ingotId) + 2 * p(s.ropeId) + 2 * p(s.plankId) + 2 * p(s.leatherId);
+}
+
+async function fetchMarketData(userInitiated = false) {
+  const now = Date.now();
+  if (userInitiated) {
+    const elapsed = now - lastRefreshTime;
+    const cooldown = 60_000;
+    if (elapsed < cooldown) {
+      const remaining = Math.ceil((cooldown - elapsed) / 1000);
+      setRefreshStatus(`Wait ${remaining}s before refreshing.`);
+      startCooldownDisplay();
+      return;
+    }
+  }
+
+  lastRefreshTime = now;
+  setRefreshStatus('Fetching market data…');
+  document.getElementById('btn-refresh').disabled = true;
+
+  try {
+    const r = await fetch('/api/market_batch');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    rawOrders = data.items || {};
+    marketFetchedAt = data.fetched_at || null;
+    const ts = marketFetchedAt ? new Date(marketFetchedAt).toLocaleString() : 'unknown';
+    setRefreshStatus(`Updated: ${ts}`);
+    document.getElementById('price-note').textContent =
+      `Prices: ${getPricingModeLabel()}. Last updated: ${ts}`;
+    document.getElementById('btn-optimize').disabled = false;
+  } catch (e) {
+    setRefreshStatus('Could not load market data.');
+    document.getElementById('price-note').textContent = 'Could not load market data.';
+  }
+
+  startCooldownDisplay();
+  calculate();
+}
+
+function getPricingModeLabel() {
+  const mode = document.querySelector('input[name="pricing-mode"]:checked')?.value || 'median';
+  return { median: 'median sell', vwap: 'raw VWAP', trimmed: 'trimmed VWAP', fill: 'cost to fill' }[mode];
+}
+
+function setRefreshStatus(msg) {
+  document.getElementById('refresh-status').textContent = msg;
+}
+
+function startCooldownDisplay() {
+  if (refreshCooldownTimer) clearInterval(refreshCooldownTimer);
+  const btn = document.getElementById('btn-refresh');
+  refreshCooldownTimer = setInterval(() => {
+    const elapsed = Date.now() - lastRefreshTime;
+    const remaining = Math.ceil((60_000 - elapsed) / 1000);
+    if (remaining <= 0) {
+      clearInterval(refreshCooldownTimer);
+      refreshCooldownTimer = null;
+      btn.disabled = false;
+    } else {
+      btn.disabled = true;
+    }
+  }, 500);
+}
+
+// ── Region selector ───────────────────────────────────────────────────────────
+
+async function loadRegions() {
+  try {
+    const r = await fetch('/api/regions');
+    const data = await r.json();
+    allRegions = data.regions || [];
+  } catch (e) {
+    allRegions = [];
+  }
+  renderRegionGrid();
+}
+
+function renderRegionGrid() {
+  const grid = document.getElementById('region-grid');
+  grid.innerHTML = '';
+  if (allRegions.length === 0) {
+    grid.innerHTML = '<span style="color:var(--fg-dim);font-size:11px">No regions found.</span>';
+    return;
+  }
+
+  const asc = [...allRegions].sort((a, b) => a.id - b.id);
+  const rows = [];
+  for (let i = 0; i < asc.length; i += 3) rows.push(asc.slice(i, i + 3));
+  rows.reverse();
+  const sorted = rows.flat();
+
+  for (const region of sorted) {
+    const btn = document.createElement('button');
+    btn.className = 'region-btn active';
+    btn.dataset.regionId = region.id;
+    btn.title = region.name || `Region ${region.id}`;
+    btn.textContent = region.id;
+    btn.addEventListener('click', () => {
+      btn.classList.toggle('active');
+      syncSelectedRegions();
+      calculate();
+    });
+    grid.appendChild(btn);
+  }
+
+  syncSelectedRegions();
+}
+
+function syncSelectedRegions() {
+  const btns = document.querySelectorAll('.region-btn');
+  const activeIds = [...btns].filter(b => b.classList.contains('active')).map(b => parseInt(b.dataset.regionId));
+  const allIds    = [...btns].map(b => parseInt(b.dataset.regionId));
+
+  if (activeIds.length === allIds.length) {
+    selectedRegions = null;
+  } else {
+    selectedRegions = new Set(activeIds);
+  }
+}
+
+document.getElementById('btn-regions-all').addEventListener('click', () => {
+  document.querySelectorAll('.region-btn').forEach(b => b.classList.add('active'));
+  syncSelectedRegions();
+  calculate();
+});
+
+document.getElementById('btn-regions-none').addEventListener('click', () => {
+  document.querySelectorAll('.region-btn').forEach(b => b.classList.remove('active'));
+  syncSelectedRegions();
+  calculate();
+});
+
+document.getElementById('pricing-modes').addEventListener('change', () => {
+  document.querySelectorAll('.pricing-mode-opt').forEach(el => {
+    el.classList.toggle('selected', el.querySelector('input').checked);
+  });
+  const ts = marketFetchedAt ? new Date(marketFetchedAt).toLocaleString() : 'unknown';
+  document.getElementById('price-note').textContent =
+    `Prices: ${getPricingModeLabel()}. Last updated: ${ts}`;
+  calculate();
+});
+
+document.getElementById('btn-refresh').addEventListener('click', () => fetchMarketData(true));
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function applyTransition(dist) {
+  const next = {};
+  for (const [fromQ, prob] of Object.entries(dist)) {
+    const row = TRANSITION[fromQ];
+    if (!row) continue;
+    for (const [toQ, p] of Object.entries(row)) {
+      next[toQ] = (next[toQ] || 0) + prob * p;
+    }
+  }
+  return next;
+}
+
+function fmt(n, decimals = 0) {
+  if (!isFinite(n)) return '∞';
+  return n.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function fmtCost(n) {
+  if (!isFinite(n)) return '∞';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M ⬡';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K ⬡';
+  return Math.round(n).toLocaleString() + ' ⬡';
+}
+
+function fmtPct(p) {
+  if (p === 0) return '0%';
+  if (p >= 0.001)    return (p * 100).toFixed(3) + '%';
+  if (p >= 0.000001) return (p * 100).toFixed(6) + '%';
+  return p.toExponential(3);
+}
+
+function qBadge(q) {
+  return `<span class="q-badge ${q}">${q}</span>`;
+}
+
+// ── Markov engine ─────────────────────────────────────────────────────────────
+
+function runMarkov(targetTier, targetQuality, keepSets) {
+  let dist = applyTransition({ Common: 1.0 });
+
+  const survivalRates = { 1: 1.0, 2: 1.0 };
+
+  for (let t = 2; t <= targetTier - 1; t++) {
+    const keepSet = keepSets[t] ?? new Set(TIER_QUALITIES[t]);
+    const filteredDist = {};
+    let kept = 0;
+    for (const q of QUALITIES) {
+      if (keepSet.has(q) && (dist[q] || 0) > 0) {
+        filteredDist[q] = dist[q];
+        kept += dist[q];
+      }
+    }
+    survivalRates[t + 1] = kept;
+    dist = applyTransition(filteredDist);
+  }
+
+  const pTarget = dist[targetQuality] || 0;
+  const expectedChains = pTarget > 0 ? 1 / pTarget : Infinity;
+
+  let totalCost = 0;
+  let totalCrafts = 0;
+  for (let t = 1; t <= targetTier; t++) {
+    const crafts = (survivalRates[t] ?? 0) * expectedChains;
+    totalCrafts += crafts;
+    totalCost += crafts * costPerCraft(t);
+  }
+
+  return { dist, survivalRates, pTarget, expectedChains, totalCost, totalCrafts };
+}
+
+// ── Optimizer ─────────────────────────────────────────────────────────────────
+
+function optimize(targetTier, targetQuality) {
+  let bestCost = Infinity;
+  let bestKeepSets = null;
+
+  const initialReachable = new Set(Object.keys(TRANSITION['Common']));
+
+  function enumerate(t, keepSets, reachableAtT) {
+    if (t >= targetTier) {
+      const { totalCost } = runMarkov(targetTier, targetQuality, keepSets);
+      if (totalCost < bestCost) {
+        bestCost = totalCost;
+        bestKeepSets = {};
+        for (const [k, v] of Object.entries(keepSets)) bestKeepSets[k] = new Set(v);
+      }
+      return;
+    }
+    const qs = QUALITIES.filter(q => reachableAtT.has(q));
+    if (qs.length === 0) { enumerate(t + 1, keepSets, new Set()); return; }
+    for (let i = 0; i < qs.length; i++) {
+      const kept = new Set(qs.slice(i));
+      keepSets[t] = kept;
+      const nextReachable = new Set();
+      for (const q of kept) {
+        for (const nextQ of Object.keys(TRANSITION[q] ?? {})) {
+          if ((TIER_QUALITIES[t + 1] ?? []).includes(nextQ)) nextReachable.add(nextQ);
+        }
+      }
+      enumerate(t + 1, keepSets, nextReachable);
+    }
+    delete keepSets[t];
+  }
+
+  enumerate(2, {}, initialReachable);
+  return { keepSets: bestKeepSets, cost: bestCost };
+}
+
+function computeReachable(targetTier, keepSets) {
+  const reachable = {};
+  let current = new Set(Object.keys(TRANSITION['Common']));
+  reachable[2] = current;
+  for (let t = 2; t <= targetTier - 1; t++) {
+    const kept = keepSets[t]
+      ? new Set([...current].filter(q => keepSets[t].has(q)))
+      : current;
+    const next = new Set();
+    for (const q of kept) {
+      for (const nextQ of Object.keys(TRANSITION[q] ?? {})) {
+        if ((TIER_QUALITIES[t + 1] ?? []).includes(nextQ)) next.add(nextQ);
+      }
+    }
+    reachable[t + 1] = next;
+    current = next;
+  }
+  return reachable;
+}
+
+// ── Rarity dropdown ───────────────────────────────────────────────────────────
+
+function buildRarityDropdown() {
+  const tierVal = document.getElementById('target-tier').value;
+  const sel = document.getElementById('target-rarity');
+  const prev = sel.value;
+  sel.innerHTML = '';
+  const blankOpt = document.createElement('option');
+  blankOpt.value = '';
+  blankOpt.textContent = '— select quality —';
+  sel.appendChild(blankOpt);
+  if (!tierVal) return;
+  const targetTier = parseInt(tierVal);
+  const qs = TIER_QUALITIES[targetTier] || [];
+  for (const q of qs) {
+    const opt = document.createElement('option');
+    opt.value = q;
+    opt.textContent = q;
+    sel.appendChild(opt);
+  }
+  sel.value = qs.includes(prev) ? prev : '';
+}
+
+// ── Filter UI ─────────────────────────────────────────────────────────────────
+
+function buildFilters(forcedStates = null) {
+  const tierVal = document.getElementById('target-tier').value;
+  if (!tierVal) { document.getElementById('filter-container').innerHTML = ''; return; }
+  const targetTier = parseInt(tierVal);
+  const container  = document.getElementById('filter-container');
+
+  const savedStates = {};
+  for (let t = 2; t <= targetTier - 1; t++) {
+    savedStates[t] = {};
+    for (const q of TIER_QUALITIES[t] || []) {
+      const cb = document.getElementById(`keep-t${t}-${q}`);
+      if (cb) savedStates[t][q] = cb.checked;
+    }
+  }
+
+  const keepSets = {};
+  for (let t = 2; t <= targetTier - 1; t++) {
+    if (forcedStates) {
+      keepSets[t] = forcedStates[t] ?? new Set(TIER_QUALITIES[t]);
+    } else {
+      keepSets[t] = new Set(
+        (TIER_QUALITIES[t] || []).filter(q => savedStates[t]?.[q] !== false)
+      );
+    }
+  }
+
+  const reachable = computeReachable(targetTier, keepSets);
+
+  container.innerHTML = '';
+  if (targetTier <= 2) {
+    container.innerHTML = '<span class="hint">No intermediate tiers to filter.</span>';
+    return;
+  }
+
+  for (let t = 2; t <= targetTier - 1; t++) {
+    const reachableQs = reachable[t] ?? new Set();
+    const section = document.createElement('div');
+    section.className = 'filter-tier';
+
+    const lbl = document.createElement('div');
+    lbl.className = 'filter-tier-label';
+    lbl.textContent = `T${t} — ${STEP_DATA[t].tool}`;
+    section.appendChild(lbl);
+
+    const chips = document.createElement('div');
+    chips.className = 'filter-chips';
+
+    for (const q of TIER_QUALITIES[t] || []) {
+      if (!reachableQs.has(q)) continue;
+
+      const label = document.createElement('label');
+      label.className = `q-chip ${q}`;
+      label.title = `Upgrade T${t} ${q} tools to T${t + 1}`;
+
+      const cb = document.createElement('input');
+      cb.type    = 'checkbox';
+      cb.id      = `keep-t${t}-${q}`;
+      cb.checked = forcedStates ? (forcedStates[t]?.has(q) ?? true) : (savedStates[t]?.[q] ?? true);
+      if (!cb.checked) label.classList.add('unchecked');
+
+      cb.addEventListener('change', () => {
+        label.classList.toggle('unchecked', !cb.checked);
+        document.getElementById('optimize-note').textContent = '';
+        buildFilters();
+        calculate();
+      });
+
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(q));
+      chips.appendChild(label);
+    }
+
+    section.appendChild(chips);
+    container.appendChild(section);
+  }
+}
+
+function readKeepSets(targetTier) {
+  const keepSets = {};
+  for (let t = 2; t <= targetTier - 1; t++) {
+    keepSets[t] = new Set();
+    for (const q of TIER_QUALITIES[t] || []) {
+      const cb = document.getElementById(`keep-t${t}-${q}`);
+      if (cb && cb.checked) keepSets[t].add(q);
+    }
+  }
+  return keepSets;
+}
+
+// ── Rerolling calculations ────────────────────────────────────────────────────
+
+/**
+ * Compute crafting cost for one Reforging Solvent at a given tier.
+ * Returns { fishOilPrice, cheapestSeedPrice, cheapestSeedName, catalystCost, solventCost }
+ * or null if market prices are unavailable.
+ */
+function computeSolventCost(tier) {
+  const s = SOLVENT_DATA[tier];
+  if (!s) return null;
+
+  // ── Option A: craft catalyst from Fish Oil + Seeds ──
+  let craftedCatalystCost = null;
+  let fishOilPrice        = null;
+  let cheapestSeedPrice   = null;
+  let cheapestSeedName    = null;
+
+  fishOilPrice = computePrice(s.fishOilId);
+  if (fishOilPrice != null) {
+    for (let i = 0; i < s.seedIds.length; i++) {
+      const p = computePrice(s.seedIds[i]);
+      if (p != null && (cheapestSeedPrice == null || p < cheapestSeedPrice)) {
+        cheapestSeedPrice = p;
+        cheapestSeedName  = s.seedNames[i];
+      }
+    }
+    if (cheapestSeedPrice != null) {
+      craftedCatalystCost = 2 * fishOilPrice + 10 * cheapestSeedPrice;
+    }
+  }
+
+  // ── Option B: buy catalyst from market ──
+  const marketCatalystPrice = s.catalystId ? computePrice(s.catalystId) : null;
+
+  // Neither source available
+  if (craftedCatalystCost == null && marketCatalystPrice == null) return null;
+
+  // Pick cheaper catalyst source
+  let catalystCost, catalystSource;
+  if (craftedCatalystCost != null && marketCatalystPrice != null) {
+    if (marketCatalystPrice < craftedCatalystCost) {
+      catalystCost   = marketCatalystPrice;
+      catalystSource = 'market';
+    } else {
+      catalystCost   = craftedCatalystCost;
+      catalystSource = 'craft';
+    }
+  } else if (craftedCatalystCost != null) {
+    catalystCost   = craftedCatalystCost;
+    catalystSource = 'craft';
+  } else {
+    catalystCost   = marketCatalystPrice;
+    catalystSource = 'market';
+  }
+
+  const solventCost = catalystCost + STABILIZER_COST;
+
+  return {
+    fishOilPrice, cheapestSeedPrice, cheapestSeedName,
+    craftedCatalystCost, marketCatalystPrice,
+    catalystCost, catalystSource,
+    solventCost,
+  };
+}
+
+/**
+ * Compute the cost of one recraft attempt at a given tier.
+ * scrapQty × scrapPrice + solventQty × solventCost
+ * Returns null if prices unavailable.
+ */
+function computeReCraftAttemptCost(tier, scrapQty, solventQty) {
+  const s = SOLVENT_DATA[tier];
+  if (!s) return null;
+
+  const scrapPrice  = s.scrapId ? (computePrice(s.scrapId) ?? 0) : 0;
+  const solventData = computeSolventCost(tier);
+  if (!solventData) return null;
+
+  return {
+    scrapCost:   scrapQty  * scrapPrice,
+    solventCost: solventQty * solventData.solventCost,
+    total:       scrapQty  * scrapPrice + solventQty * solventData.solventCost,
+    scrapPrice,
+    perSolvent:  solventData.solventCost,
+  };
+}
+
+// ── Solvent card ──────────────────────────────────────────────────────────────
+
+function updateSolventCard(targetTier) {
+  const card  = document.getElementById('solvent-card');
+  const title = document.getElementById('solvent-title');
+  const tbody = document.getElementById('solvent-body');
+  const note  = document.getElementById('solvent-note');
+
+  if (!targetTier) { card.style.display = 'none'; return; }
+
+  const s    = SOLVENT_DATA[targetTier];
+  const data = computeSolventCost(targetTier);
+
+  card.style.display = '';
+  title.textContent  = `Reforging Solvent Cost — T${targetTier} (${s?.prefix ?? ''} — Crafted)`;
+
+  if (!data) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--fg-dim);padding:16px">
+      No market prices available for T${targetTier} Fish Oil, Seeds, or Chemical Catalyst.</td></tr>`;
+    note.textContent = '';
+    return;
+  }
+
+  const usingMarket  = data.catalystSource === 'market';
+  const usingCraft   = data.catalystSource === 'craft';
+  const hasBoth      = data.craftedCatalystCost != null && data.marketCatalystPrice != null;
+
+  const rows = [];
+
+  if (data.craftedCatalystCost != null) {
+    const cheaper = usingCraft;
+    rows.push({ label: 'Fish Oil',       item: s.fishOilName,         qty: 2,  price: data.fishOilPrice,      sub: 2 * data.fishOilPrice,      dim: usingMarket });
+    rows.push({ label: 'Cheapest Seed',  item: data.cheapestSeedName, qty: 10, price: data.cheapestSeedPrice, sub: 10 * data.cheapestSeedPrice, dim: usingMarket });
+    rows.push({
+      label: `Craft Catalyst${cheaper ? ' ✓ cheaper' : ''}`,
+      item:  `${s.catalystName} (crafted)`,
+      qty: 1, price: null,
+      sub: data.craftedCatalystCost,
+      bold: true, dim: usingMarket,
+      accent: usingCraft,
+    });
+  }
+
+  if (data.marketCatalystPrice != null) {
+    const cheaper = usingMarket;
+    rows.push({
+      label: `Buy Catalyst${cheaper ? ' ✓ cheaper' : ''}`,
+      item:  `${s.catalystName} (market)`,
+      qty: 1, price: data.marketCatalystPrice,
+      sub: data.marketCatalystPrice,
+      bold: true, dim: usingCraft,
+      accent: usingMarket,
+    });
+  }
+
+  rows.push({ sep: true });
+  rows.push({ label: 'Catalyst used', item: usingMarket ? 'market price' : 'crafted', qty: 1, price: null, sub: data.catalystCost, bold: true });
+  rows.push({ label: 'Reforging Stabilizer', item: 'NPC purchase', qty: 1, price: STABILIZER_COST, sub: STABILIZER_COST });
+
+  tbody.innerHTML = rows.map(r => {
+    if (r.sep) return `<tr><td colspan="5" style="padding:2px;background:var(--border)"></td></tr>`;
+    const dimStyle    = r.dim    ? ' style="opacity:0.4"' : '';
+    const accentStyle = r.accent ? ' style="color:var(--green)"' : '';
+    const boldStyle   = r.bold   ? ' style="font-weight:600"' : '';
+    return `<tr${dimStyle}>
+      <td${accentStyle}>${r.label}</td>
+      <td style="color:var(--fg-dim);font-size:11px">${r.item}</td>
+      <td class="num">${r.qty}</td>
+      <td class="num">${r.price != null ? fmtCost(r.price) : '—'}</td>
+      <td class="num"${r.accent ? ' style="color:var(--green);font-weight:600"' : boldStyle}>${fmtCost(r.sub)}</td>
+    </tr>`;
+  }).join('') + `
+    <tr style="border-top:2px solid var(--border);background:var(--surface2);font-weight:700">
+      <td colspan="4">${s.prefix} Reforging Solvent</td>
+      <td class="num" style="color:var(--accent)">${fmtCost(data.solventCost)}</td>
+    </tr>`;
+
+  const sourceNote = hasBoth
+    ? `Using ${usingMarket ? 'market' : 'crafted'} Catalyst (${fmtCost(data.catalystCost)}) — ${usingMarket ? 'cheaper than crafting' : 'cheaper than market'} (${fmtCost(usingMarket ? data.craftedCatalystCost : data.marketCatalystPrice)}).`
+    : `Only ${data.catalystSource === 'market' ? 'market' : 'craft'} price available for ${s.catalystName}.`;
+  note.textContent = sourceNote + (usingCraft && data.cheapestSeedName
+    ? ` Cheapest seed: ${data.cheapestSeedName} @ ${fmtCost(data.cheapestSeedPrice)} ea.`
+    : '');
+}
+
+// ── Recraft options card ──────────────────────────────────────────────────────
+
+function updateReCraftCard(targetTier, targetQuality, confPct) {
+  const card  = document.getElementById('recraft-card');
+  const title = document.getElementById('recraft-title');
+  const hint  = document.getElementById('recraft-hint');
+  const tbody = document.getElementById('recraft-body');
+  const note  = document.getElementById('recraft-note');
+
+  for (const el of document.querySelectorAll('.recraft-conf')) el.textContent = confPct;
+
+  if (!targetTier || !targetQuality) { card.style.display = 'none'; return; }
+
+  const tierQuals  = TIER_QUALITIES[targetTier] || [];
+  const options    = RECRAFT_TIERS[targetTier] || [];
+  const solventData = computeSolventCost(targetTier);
+  const s           = SOLVENT_DATA[targetTier];
+
+  card.style.display = '';
+  title.textContent  = `Recraft Options — T${targetTier} (${s?.prefix ?? ''})`;
+
+  // Filter: only show options whose distribution contains at least one quality
+  // achievable at this tier.
+  const filteredOpts = options.filter(([scrap]) => {
+    const dist = RECRAFT_DIST[scrap];
+    return dist && dist.some(e => tierQuals.includes(e.q));
+  });
+
+  if (filteredOpts.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--fg-dim);padding:16px">No recraft options for this tier.</td></tr>`;
+    hint.textContent = '';
+    note.textContent = '';
+    return;
+  }
+
+  const scrapPrice    = s?.scrapId ? (computePrice(s.scrapId) ?? null) : null;
+  const noPrices      = !solventData;
+
+  hint.textContent =
+    `Each attempt recrafts the T${targetTier} tool from scratch at that quality tier. ` +
+    `Highlighted rows can produce ${targetQuality}. Scrap price: ` +
+    (scrapPrice != null ? `${fmtCost(scrapPrice)} ea (${s.scrapName}).` : `no market data for ${s?.scrapName ?? 'tool scrap'}.`);
+
+  tbody.innerHTML = '';
+
+  for (const [scrapQty, solventQty] of filteredOpts) {
+    const dist    = RECRAFT_DIST[scrapQty];
+    if (!dist) continue;
+
+    // Filter dist to qualities achievable at this tier
+    const visibleDist = dist.filter(e => tierQuals.includes(e.q));
+
+    // Probability of hitting the target quality in one recraft attempt
+    const targetEntry = visibleDist.find(e => e.q === targetQuality);
+    const pTarget     = targetEntry ? targetEntry.p : 0;
+
+    // Is the target quality reachable by this recraft option?
+    const isRelevant  = pTarget > 0;
+
+    // Cost per attempt
+    const costData = (scrapPrice != null && solventData)
+      ? computeReCraftAttemptCost(targetTier, scrapQty, solventQty)
+      : null;
+
+    // Attempts needed at confidence level, and total cost
+    const attemptsConf = (isRelevant && pTarget > 0)
+      ? Math.ceil(Math.log(1 - confPct / 100) / Math.log(1 - pTarget))
+      : null;
+    const totalConf = (costData && attemptsConf != null)
+      ? attemptsConf * costData.total
+      : null;
+
+    // Distribution display
+    const distHtml = visibleDist.map(e =>
+      `${(e.p * 100).toFixed(e.p >= 0.1 ? 2 : 3)}% ${qBadge(e.q)}`
+    ).join(' &nbsp;/&nbsp; ');
+
+    const tr = document.createElement('tr');
+    if (isRelevant) tr.classList.add('recraft-target');
+
+    tr.innerHTML = `
+      <td class="num"><strong>${fmt(scrapQty)}</strong><span class="mat-name">${s?.scrapName ?? ''}</span></td>
+      <td class="num">${solventQty}</td>
+      <td>${distHtml}</td>
+      <td class="num">${costData ? fmtCost(costData.scrapCost) : (scrapPrice == null ? '<span style="color:var(--fg-dim)">no data</span>' : '—')}</td>
+      <td class="num">${costData ? fmtCost(costData.solventCost) : (noPrices ? '<span style="color:var(--fg-dim)">no data</span>' : '—')}</td>
+      <td class="num">${costData ? fmtCost(costData.total) : '—'}</td>
+      <td class="num">${attemptsConf != null ? fmt(attemptsConf) : (isRelevant ? '—' : '<span style="color:var(--fg-dim)">n/a</span>')}</td>
+      <td class="num">${totalConf != null ? fmtCost(totalConf) : (isRelevant ? '—' : '<span style="color:var(--fg-dim)">n/a</span>')}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  // Summary note
+  const bestRelevant = filteredOpts
+    .filter(([sc]) => {
+      const d = RECRAFT_DIST[sc];
+      return d && d.some(e => e.q === targetQuality && e.p > 0);
+    })
+    .map(([sc, sv]) => {
+      const costData = (scrapPrice != null && solventData)
+        ? computeReCraftAttemptCost(targetTier, sc, sv)
+        : null;
+      const pT = RECRAFT_DIST[sc]?.find(e => e.q === targetQuality)?.p ?? 0;
+      const att = pT > 0
+        ? Math.ceil(Math.log(1 - confPct / 100) / Math.log(1 - pT))
+        : null;
+      return { scrap: sc, solv: sv, costData, att, total: (costData && att) ? att * costData.total : null };
+    })
+    .filter(x => x.total != null)
+    .sort((a, b) => a.total - b.total);
+
+  if (bestRelevant.length > 0) {
+    const best = bestRelevant[0];
+    note.textContent =
+      `Cheapest recraft path to ${targetQuality} at ${confPct}% confidence: ` +
+      `${best.scrap} scrap + ${best.solv} solvent${best.solv > 1 ? 's' : ''} per attempt × ${fmt(best.att)} attempts = ${fmtCost(best.total)}.`;
+  } else {
+    note.textContent = noPrices
+      ? 'No market data available to estimate recraft cost.'
+      : `No recraft option at T${targetTier} can produce ${targetQuality}.`;
+  }
+}
+
+// ── Calculate (render) ────────────────────────────────────────────────────────
+
+function calculate() {
+  const tierVal       = document.getElementById('target-tier').value;
+  const targetQuality = document.getElementById('target-rarity').value;
+  const targetTier    = tierVal ? parseInt(tierVal) : null;
+
+  const confPct = Math.max(1, Math.min(99, parseFloat(document.getElementById('confidence-pct').value) || 90));
+
+  // Update confidence display in recraft headers
+  document.getElementById('recraft-conf').textContent  = confPct;
+  document.getElementById('recraft-conf2').textContent = confPct;
+
+  // Always update solvent & recraft cards (they handle their own empty state)
+  updateSolventCard(targetTier);
+  updateReCraftCard(targetTier, targetQuality, confPct);
+
+  if (!tierVal || !targetQuality) return;
+
+  const keepSets = readKeepSets(targetTier);
+  const { survivalRates, pTarget, expectedChains }
+    = runMarkov(targetTier, targetQuality, keepSets);
+
+  const nChainsConf = pTarget > 0 ? Math.ceil(Math.log(1 - confPct / 100) / Math.log(1 - pTarget)) : Infinity;
+
+  document.getElementById('summary-title').textContent =
+    `Material Requirements — ${targetQuality} ${STEP_DATA[targetTier].tool} @ ${confPct}% confidence`;
+  document.getElementById('formula-conf').textContent = confPct;
+
+  const tbody = document.getElementById('results-body');
+  tbody.innerHTML = '';
+
+  let totCost = 0;
+  let totCrafts = 0;
+  const tierCostData = [];
+
+  for (let t = 1; t <= targetTier; t++) {
+    const step    = STEP_DATA[t];
+    const crafts  = Math.ceil((survivalRates[t] ?? 0) * (pTarget > 0 ? nChainsConf : 0));
+    const ingots  = crafts * step.ingotQty;
+    const rope    = crafts * 2;
+    const plank   = crafts * 2;
+    const leather = crafts * 2;
+    const cpc     = costPerCraft(t);
+    const tierCost = crafts * cpc;
+    const missing  = !hasPrices(t);
+
+    totCost   += tierCost;
+    totCrafts += crafts;
+    tierCostData.push({ t, label: `T${t}`, cost: tierCost, hasPrices: !missing });
+
+    const pIngot   = missing ? null : computePrice(step.ingotId);
+    const pRope    = missing ? null : computePrice(step.ropeId);
+    const pPlank   = missing ? null : computePrice(step.plankId);
+    const pLeather = missing ? null : computePrice(step.leatherId);
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="tier-label">T${t}</span></td>
+      <td>
+        <span class="tier-label">${step.tool}</span>
+        <span class="sub-label">${step.action}</span>
+      </td>
+      <td class="num">${fmt(crafts)}</td>
+      <td class="num" style="color:var(--fg-dim)">${((survivalRates[t] ?? 0) * 100).toFixed(1)}%</td>
+      <td class="num">${fmt(ingots)}<span class="mat-name">${step.ingot}</span>${pIngot != null ? `<span class="mat-price">${fmtCost(pIngot)} ea</span>` : ''}</td>
+      <td class="num">${fmt(rope)}<span class="mat-name">${step.rope}</span>${pRope != null ? `<span class="mat-price">${fmtCost(pRope)} ea</span>` : ''}</td>
+      <td class="num">${fmt(plank)}<span class="mat-name">${step.plank}</span>${pPlank != null ? `<span class="mat-price">${fmtCost(pPlank)} ea</span>` : ''}</td>
+      <td class="num">${fmt(leather)}<span class="mat-name">${step.leather}</span>${pLeather != null ? `<span class="mat-price">${fmtCost(pLeather)} ea</span>` : ''}</td>
+      <td class="num">${missing ? '—' : fmtCost(cpc)}</td>
+      <td class="num">${missing ? '—' : fmtCost(tierCost)}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  const totRow = document.createElement('tr');
+  totRow.className = 'totals-row';
+  totRow.innerHTML = `
+    <td colspan="2">Total</td>
+    <td class="num">${fmt(totCrafts)}</td>
+    <td class="num"></td>
+    <td class="num"></td>
+    <td class="num"></td>
+    <td class="num"></td>
+    <td class="num"></td>
+    <td class="num">—</td>
+    <td class="num">${fmtCost(totCost)}</td>`;
+  tbody.appendChild(totRow);
+
+  updateCharts(pTarget, nChainsConf, confPct, tierCostData);
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+
+Chart.defaults.color = '#cdd6f4';
+
+let chartCurve = null;
+
+const vLinePlugin = {
+  id: 'vLine',
+  afterDraw(chart) {
+    const opts = chart.options.plugins.vLine;
+    if (!opts || opts.x == null) return;
+    const { ctx, scales } = chart;
+    const xPx = scales.x.getPixelForValue(opts.x);
+    if (xPx < scales.x.left || xPx > scales.x.right) return;
+    ctx.save();
+    ctx.strokeStyle = opts.color || '#cba6f7';
+    ctx.lineWidth   = 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(xPx, scales.y.top);
+    ctx.lineTo(xPx, scales.y.bottom);
+    ctx.stroke();
+    if (opts.label) {
+      ctx.setLineDash([]);
+      ctx.fillStyle = opts.color || '#cba6f7';
+      ctx.font = '11px monospace';
+      ctx.fillText(opts.label, xPx + 5, scales.y.top + 13);
+    }
+    ctx.restore();
+  },
+};
+
+function alignChartHeight() {
+  const leftPanel = document.querySelector('main > div:first-child');
+  const chartCard = document.getElementById('chart-card-curve');
+  const matsCard  = document.getElementById('results-body').closest('.card');
+  chartCard.style.height = '';
+  requestAnimationFrame(() => {
+    const leftH  = leftPanel.offsetHeight;
+    const matsH  = matsCard.offsetHeight;
+    const margin = parseFloat(getComputedStyle(matsCard).marginBottom) || 14;
+    const h = leftH - matsH - margin;
+    if (h > 150) chartCard.style.height = h + 'px';
+  });
+}
+
+function updateCharts(pTarget, nChainsConf, confPct, tierCostData) {
+  updateCurveChart(pTarget, nChainsConf, confPct);
+  alignChartHeight();
+}
+
+function updateCurveChart(pTarget, nChainsConf, confPct) {
+  const empty  = document.getElementById('chart-empty');
+  const canvas = document.getElementById('chart-curve');
+  if (pTarget <= 0 || !isFinite(nChainsConf)) {
+    if (chartCurve) { chartCurve.destroy(); chartCurve = null; }
+    canvas.style.display = 'none';
+    empty.style.display  = 'flex';
+    return;
+  }
+  empty.style.display  = 'none';
+  canvas.style.display = '';
+
+  const maxN      = Math.min(Math.ceil(nChainsConf * 3), 15000);
+  const N_POINTS  = 300;
+  const step      = Math.max(1, maxN / N_POINTS);
+
+  const labels = [];
+  const values = [];
+  for (let i = 0; i <= N_POINTS; i++) {
+    const n = Math.round(i * step);
+    labels.push(n);
+    values.push(+((1 - Math.pow(1 - pTarget, n)) * 100).toFixed(3));
+  }
+
+  const ctx = document.getElementById('chart-curve').getContext('2d');
+  if (chartCurve) { chartCurve.destroy(); chartCurve = null; }
+
+  chartCurve = new Chart(ctx, {
+    type: 'line',
+    plugins: [vLinePlugin],
+    data: {
+      labels,
+      datasets: [{
+        label: 'Confidence %',
+        data: values,
+        borderColor: '#89b4fa',
+        backgroundColor: 'rgba(137,180,250,0.12)',
+        fill: true,
+        tension: 0.35,
+        pointRadius: 0,
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      animation: false,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => `${items[0].label} tool rolls`,
+            label:  item  => `${item.raw.toFixed(1)}% confidence`,
+          },
+        },
+        vLine: { x: nChainsConf, color: '#cba6f7', label: `${confPct}%` },
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Tool rolls attempted' },
+          ticks: {
+            maxTicksLimit: 8,
+            callback: v => fmt(labels[v] ?? v),
+          },
+          grid: { color: '#313244' },
+        },
+        y: {
+          min: 0, max: 100,
+          title: { display: true, text: 'Confidence %' },
+          ticks: { callback: v => v + '%' },
+          grid: { color: '#313244' },
+        },
+      },
+    },
+  });
+}
+
+// ── Optimize button ───────────────────────────────────────────────────────────
+
+document.getElementById('btn-optimize').addEventListener('click', () => {
+  const targetTier    = parseInt(document.getElementById('target-tier').value);
+  const targetQuality = document.getElementById('target-rarity').value;
+
+  const { keepSets, cost } = optimize(targetTier, targetQuality);
+
+  if (!keepSets) {
+    document.getElementById('optimize-note').textContent = 'No valid filter found.';
+    return;
+  }
+
+  buildFilters(keepSets);
+  calculate();
+
+  const parts = [];
+  for (let t = 2; t <= targetTier - 1; t++) {
+    const qs = TIER_QUALITIES[t];
+    const kept = keepSets[t] ?? new Set(qs);
+    const threshold = qs.find(q => kept.has(q)) ?? 'none';
+    parts.push(`T${t}: ${threshold}+`);
+  }
+  document.getElementById('optimize-note').textContent =
+    `Optimal: ${parts.join(' · ')} → ${fmtCost(cost)}`;
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+document.getElementById('target-tier').addEventListener('change', () => {
+  buildRarityDropdown();
+  buildFilters();
+  document.getElementById('optimize-note').textContent = '';
+  calculate();
+});
+
+document.getElementById('target-rarity').addEventListener('change', () => {
+  document.getElementById('optimize-note').textContent = '';
+  calculate();
+});
+
+document.getElementById('confidence-pct').addEventListener('input', () => calculate());
+
+buildRarityDropdown();
+buildFilters();
+loadRegions();
+fetchMarketData();
+window.addEventListener('resize', alignChartHeight);
+</script>
+
+</body>
+</html>
