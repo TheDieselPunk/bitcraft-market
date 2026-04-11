@@ -34,8 +34,12 @@
     main {
       max-width: 1500px; margin: 0 auto; padding: 20px 24px;
       display: grid; grid-template-columns: 300px 1fr; gap: 20px;
-      align-items: start;
+      align-items: stretch;
     }
+    /* Both panels are flex columns so the chart can fill remaining height */
+    main > div { display: flex; flex-direction: column; }
+    #chart-card-curve { flex: 1; min-height: 180px; display: flex; flex-direction: column; }
+    #chart-card-curve canvas { flex: 1; min-height: 0; }
 
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
     .card:last-child { margin-bottom: 0; }
@@ -273,14 +277,10 @@
       </div>
     </div>
 
-    <div class="card" id="chart-card-curve" style="display:none">
+    <div class="card" id="chart-card-curve">
       <div class="card-title">Cumulative Success Probability</div>
-      <canvas id="chart-curve"></canvas>
-    </div>
-
-    <div class="card" id="chart-card-cost" style="display:none">
-      <div class="card-title">Cost by Tier</div>
-      <canvas id="chart-cost"></canvas>
+      <div id="chart-empty" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--fg-dim);font-size:12px">Select a tier and quality to see the chart.</div>
+      <canvas id="chart-curve" style="display:none"></canvas>
     </div>
   </div>
 </main>
@@ -933,15 +933,8 @@ const CHART_DEFAULTS = {
 };
 Chart.defaults.color = CHART_DEFAULTS.color;
 
-// Tier palette — visually distinct, fits dark theme
-const TIER_COLORS = [
-  '#89b4fa', '#a6e3a1', '#f9e2af', '#fab387',
-  '#f38ba8', '#cba6f7', '#89dceb', '#74c7ec',
-  '#b4befe', '#94e2d5',
-];
 
 let chartCurve = null;
-let chartCost  = null;
 
 // Inline plugin: draws a vertical dashed line at a given x value
 const vLinePlugin = {
@@ -972,17 +965,19 @@ const vLinePlugin = {
 
 function updateCharts(pTarget, nChainsConf, confPct, tierCostData) {
   updateCurveChart(pTarget, nChainsConf, confPct);
-  updateCostChart(tierCostData);
 }
 
 function updateCurveChart(pTarget, nChainsConf, confPct) {
-  const card = document.getElementById('chart-card-curve');
+  const empty  = document.getElementById('chart-empty');
+  const canvas = document.getElementById('chart-curve');
   if (pTarget <= 0 || !isFinite(nChainsConf)) {
-    card.style.display = 'none';
     if (chartCurve) { chartCurve.destroy(); chartCurve = null; }
+    canvas.style.display = 'none';
+    empty.style.display  = 'flex';
     return;
   }
-  card.style.display = '';
+  empty.style.display  = 'none';
+  canvas.style.display = '';
 
   const maxN      = Math.min(Math.ceil(nChainsConf * 3), 15000);
   const N_POINTS  = 300;
@@ -1017,6 +1012,7 @@ function updateCurveChart(pTarget, nChainsConf, confPct) {
     },
     options: {
       animation: false,
+      maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
@@ -1043,57 +1039,6 @@ function updateCurveChart(pTarget, nChainsConf, confPct) {
           ticks: { callback: v => v + '%' },
           grid: { color: '#313244' },
         },
-      },
-    },
-  });
-}
-
-function updateCostChart(tierCostData) {
-  const card = document.getElementById('chart-card-cost');
-  const priced = tierCostData.filter(d => d.hasPrices && d.cost > 0);
-  if (priced.length === 0) {
-    card.style.display = 'none';
-    if (chartCost) { chartCost.destroy(); chartCost = null; }
-    return;
-  }
-  card.style.display = '';
-
-  const labels = priced.map(d => d.label);
-  const costs  = priced.map(d => d.cost);
-  const colors = priced.map(d => TIER_COLORS[(d.t - 1) % TIER_COLORS.length]);
-
-  const ctx = document.getElementById('chart-cost').getContext('2d');
-  if (chartCost) { chartCost.destroy(); chartCost = null; }
-
-  chartCost = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Cost',
-        data: costs,
-        backgroundColor: colors.map(c => c + '99'),
-        borderColor: colors,
-        borderWidth: 1,
-        borderRadius: 4,
-      }],
-    },
-    options: {
-      animation: false,
-      indexAxis: 'y',
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: { label: item => fmtCost(item.raw) },
-        },
-      },
-      scales: {
-        x: {
-          title: { display: true, text: 'Cost (⬡)' },
-          ticks: { callback: v => fmtCost(v) },
-          grid: { color: '#313244' },
-        },
-        y: { grid: { color: '#313244' } },
       },
     },
   });
