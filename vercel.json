@@ -14,7 +14,8 @@
     { "src": "equipment_sim.html",  "use": "@vercel/static" },
     { "src": "equipment_sets.js",   "use": "@vercel/static" },
     { "src": "chain_calc.html",     "use": "@vercel/static" },
-    { "src": "tool_rolling.html",   "use": "@vercel/static" }
+    { "src": "tool_rolling.html",          "use": "@vercel/static" },
+    { "src": "tool_rolling_rerolling.html", "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/api/search",       "dest": "/api/search.py"       },
