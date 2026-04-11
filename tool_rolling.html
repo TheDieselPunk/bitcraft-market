@@ -860,7 +860,7 @@ function calculate() {
 
   for (let t = 1; t <= targetTier; t++) {
     const step    = STEP_DATA[t];
-    const crafts  = (survivalRates[t] ?? 0) * (pTarget > 0 ? nChainsConf : 0);
+    const crafts  = Math.ceil((survivalRates[t] ?? 0) * (pTarget > 0 ? nChainsConf : 0));
     const ingots  = crafts * step.ingotQty;
     const rope    = crafts * 2;
     const plank   = crafts * 2;
