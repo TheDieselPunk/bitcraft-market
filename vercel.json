@@ -6,7 +6,8 @@
     { "src": "api/version.py",      "use": "@vercel/python" },
     { "src": "api/effort.py",       "use": "@vercel/python" },
     { "src": "api/inventories.py",  "use": "@vercel/python" },
-    { "src": "api/chain_calc.py",   "use": "@vercel/python" },
+    { "src": "api/chain_calc.py",    "use": "@vercel/python" },
+    { "src": "api/market_batch.py", "use": "@vercel/python" },
     { "src": "data/**",             "use": "@vercel/static" },
     { "src": "index.html",          "use": "@vercel/static" },
     { "src": "app.js",              "use": "@vercel/static" },
@@ -22,7 +23,8 @@
     { "src": "/api/version",      "dest": "/api/version.py"      },
     { "src": "/api/effort",       "dest": "/api/effort.py"       },
     { "src": "/api/inventories",  "dest": "/api/inventories.py"  },
-    { "src": "/api/chain_calc",   "dest": "/api/chain_calc.py"   },
+    { "src": "/api/chain_calc",    "dest": "/api/chain_calc.py"    },
+    { "src": "/api/market_batch", "dest": "/api/market_batch.py" },
     { "src": "/(.*)",             "dest": "/$1"                  }
   ]
 }

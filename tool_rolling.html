@@ -48,12 +48,46 @@
       border-radius: 6px; padding: 7px 10px; color: var(--fg); font-size: 13px; outline: none;
     }
     .field select:focus { border-color: var(--accent); }
-    .field select.q-Common    { color: #6A7282; border-color: #6A7282; }
-    .field select.q-Uncommon  { color: #00C950; border-color: #00C950; }
-    .field select.q-Rare      { color: #2B7FFF; border-color: #2B7FFF; }
-    .field select.q-Epic      { color: #AD46FF; border-color: #AD46FF; }
-    .field select.q-Legendary { color: #FF6900; border-color: #FF6900; }
-    .field select.q-Mythic    { color: #D1D5DC; border-color: #D1D5DC; }
+
+    /* Pricing mode radio buttons */
+    .pricing-modes { display: flex; flex-direction: column; gap: 6px; }
+    .pricing-mode-opt {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--surface2);
+      font-size: 12px; transition: border-color .15s;
+    }
+    .pricing-mode-opt:hover { border-color: var(--accent2); }
+    .pricing-mode-opt input[type=radio] { accent-color: var(--accent2); }
+    .pricing-mode-opt.selected { border-color: var(--accent2); }
+
+    /* Refresh button */
+    .btn-refresh {
+      width: 100%; margin-top: 12px; padding: 7px;
+      background: var(--surface2); border: 1px solid var(--accent2);
+      color: var(--accent2); border-radius: 6px; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-refresh:hover:not(:disabled) { background: rgba(137,180,250,.12); }
+    .btn-refresh:disabled { border-color: var(--border); color: var(--fg-dim); cursor: not-allowed; }
+    .refresh-status { font-size: 10px; color: var(--fg-dim); margin-top: 6px; min-height: 14px; }
+
+    /* Region selector */
+    .region-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+    .region-btn {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 5px; padding: 5px 4px; font-size: 11px; font-weight: 600;
+      color: var(--fg-dim); cursor: pointer; text-align: center;
+      transition: border-color .1s, color .1s; user-select: none;
+    }
+    .region-btn:hover { border-color: var(--accent2); color: var(--fg); }
+    .region-btn.active { border-color: var(--accent2); color: var(--accent2); background: rgba(137,180,250,.1); }
+    .region-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+    .region-action-btn {
+      flex: 1; padding: 4px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; font-size: 10px; color: var(--fg-dim); cursor: pointer;
+    }
+    .region-action-btn:hover { color: var(--fg); border-color: var(--fg-dim); }
 
     .filter-tier { margin-bottom: 12px; }
     .filter-tier:last-child { margin-bottom: 0; }
@@ -107,14 +141,6 @@
     .sub-label  { color: var(--fg-dim); font-size: 11px; display: block; }
     .mat-name   { color: var(--fg-dim); font-size: 10px; display: block; }
     .mat-price  { color: var(--fg-dim); font-size: 10px; display: block; }
-
-    /* Probability breakdown */
-    .prob-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; font-size: 12px; border-bottom: 1px solid var(--border); }
-    .prob-row:last-child { border-bottom: none; }
-    .prob-row.is-target { background: rgba(255,255,255,.03); border-radius: 4px; padding: 5px 6px; margin: 0 -6px; }
-    .prob-row.is-target .prob-pct { color: var(--fg); font-weight: 700; }
-    .prob-q   { font-weight: 600; }
-    .prob-pct { color: var(--fg-dim); }
 
     .hint { font-size: 11px; color: var(--fg-dim); margin-bottom: 12px; line-height: 1.5; }
     .formula-note { font-size: 11px; color: var(--fg-dim); margin-top: 10px; line-height: 1.6; font-family: monospace; }
@@ -179,6 +205,39 @@
     </div>
 
     <div class="card">
+      <div class="card-title">Market Pricing</div>
+      <div class="field">
+        <label>Pricing Mode</label>
+        <div class="pricing-modes" id="pricing-modes">
+          <label class="pricing-mode-opt selected">
+            <input type="radio" name="pricing-mode" value="median" checked> Median Sell
+          </label>
+          <label class="pricing-mode-opt">
+            <input type="radio" name="pricing-mode" value="vwap"> Raw VWAP
+          </label>
+          <label class="pricing-mode-opt">
+            <input type="radio" name="pricing-mode" value="trimmed"> Trimmed VWAP
+          </label>
+          <label class="pricing-mode-opt">
+            <input type="radio" name="pricing-mode" value="fill"> Cost to Fill
+          </label>
+        </div>
+      </div>
+      <div class="field" style="margin-top:12px">
+        <label>Regions</label>
+        <div class="region-actions">
+          <button class="region-action-btn" id="btn-regions-all">All</button>
+          <button class="region-action-btn" id="btn-regions-none">None</button>
+        </div>
+        <div class="region-grid" id="region-grid">
+          <span style="color:var(--fg-dim);font-size:11px">Loading…</span>
+        </div>
+      </div>
+      <button class="btn-refresh" id="btn-refresh">↺ Refresh Market Data</button>
+      <div class="refresh-status" id="refresh-status"></div>
+    </div>
+
+    <div class="card">
       <div class="card-title">Upgrade Filters</div>
       <p class="hint">Which tool qualities to bother upgrading at each intermediate tier. Unchecked = scrap or sell instead.</p>
       <div id="filter-container"></div>
@@ -194,11 +253,11 @@
       <div class="metrics-row">
         <div class="metric-box">
           <div class="metric-val" id="m-prob">—</div>
-          <div class="metric-label" id="m-prob-label">P(target) per chain</div>
+          <div class="metric-label" id="m-prob-label">P(target) per tool roll</div>
         </div>
         <div class="metric-box">
           <div class="metric-val" id="m-conf-chains">—</div>
-          <div class="metric-label" id="m-conf-label">Chains at 90%</div>
+          <div class="metric-label" id="m-conf-label">Tool Rolls at 63%</div>
         </div>
         <div class="metric-box">
           <div class="metric-val" id="m-total-crafts">—</div>
@@ -211,7 +270,7 @@
       </div>
       <div class="formula-note">
         n = ⌈ ln(1 − <em>c</em>) / ln(1 − <em>p</em>) ⌉ &nbsp;·&nbsp;
-        <em>c</em> = confidence &nbsp;·&nbsp; <em>p</em> = P(target) per chain &nbsp;·&nbsp;
+        <em>c</em> = confidence &nbsp;·&nbsp; <em>p</em> = P(target) per tool roll &nbsp;·&nbsp;
         table quantities at <span id="formula-conf">63</span>% confidence
       </div>
     </div>
@@ -225,7 +284,7 @@
               <th>Tier</th>
               <th>Tool</th>
               <th class="num">Crafts</th>
-              <th class="num">% chains</th>
+              <th class="num">% rolls</th>
               <th class="num">Ingots</th>
               <th class="num">Rope</th>
               <th class="num">Plank</th>
@@ -240,11 +299,6 @@
         </table>
       </div>
       <p class="price-note" id="price-note"></p>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Quality Distribution at Target Tier</div>
-      <div id="prob-breakdown"></div>
     </div>
   </div>
 </main>
@@ -276,58 +330,58 @@ const TRANSITION = {
   'Mythic':    { 'Mythic': 1.0 },
 };
 
-// Materials for each craft step; ingotId/ropeId/plankId/leatherId for price lookup
+// Materials for each craft step
 const STEP_DATA = {
-  1: { tool:'Ferralith Tool', action:'Initial craft',
-       ingotId:'1050001', ingot:'Ferralith Ingot', ingotQty:4,
-       ropeId:'1090004',  rope:'Rough Rope',
-       plankId:'1020003', plank:'Rough Plank',
-       leatherId:'1070004', leather:'Rough Leather' },
-  2: { tool:'Pyrelite Tool',  action:'Upgrade T1→T2',
-       ingotId:'2050001', ingot:'Pyrelite Ingot', ingotQty:4,
-       ropeId:'2090004',  rope:'Simple Rope',
-       plankId:'2020003', plank:'Simple Plank',
-       leatherId:'2070004', leather:'Simple Leather' },
-  3: { tool:'Emarium Tool',   action:'Upgrade T2→T3',
-       ingotId:'3050001', ingot:'Emarium Ingot', ingotQty:4,
-       ropeId:'3090004',  rope:'Sturdy Rope',
-       plankId:'3020003', plank:'Sturdy Plank',
-       leatherId:'3070004', leather:'Sturdy Leather' },
-  4: { tool:'Elenvar Tool',   action:'Upgrade T3→T4',
-       ingotId:'4050001', ingot:'Elenvar Ingot', ingotQty:4,
-       ropeId:'4090004',  rope:'Fine Rope',
-       plankId:'4020003', plank:'Fine Plank',
-       leatherId:'4070004', leather:'Fine Leather' },
-  5: { tool:'Luminite Tool',  action:'Upgrade T4→T5',
-       ingotId:'5050001', ingot:'Luminite Ingot', ingotQty:4,
-       ropeId:'5090004',  rope:'Exquisite Rope',
-       plankId:'5020003', plank:'Exquisite Plank',
-       leatherId:'5070004', leather:'Exquisite Leather' },
-  6: { tool:'Rathium Tool',   action:'Upgrade T5→T6',
-       ingotId:'6050001', ingot:'Rathium Ingot', ingotQty:4,
-       ropeId:'6090004',  rope:'Peerless Rope',
-       plankId:'6020003', plank:'Peerless Plank',
-       leatherId:'6070004', leather:'Peerless Leather' },
-  7: { tool:'Aurumite Tool',  action:'Upgrade T6→T7',
-       ingotId:'1899017490', ingot:'Aurumite Ingot', ingotQty:4,
-       ropeId:'625147590',   rope:'Ornate Rope',
-       plankId:'1639308227', plank:'Ornate Plank',
-       leatherId:'806992520', leather:'Ornate Leather' },
-  8: { tool:'Celestium Tool',  action:'Upgrade T7→T8',
-       ingotId:'1464752960', ingot:'Celestium Ingot', ingotQty:4,
-       ropeId:'1224328894',  rope:'Pristine Rope',
-       plankId:'28056473',   plank:'Pristine Plank',
-       leatherId:'1743778001', leather:'Pristine Leather' },
-  9: { tool:'Umbracite Tool', action:'Upgrade T8→T9',
-       ingotId:'445742898',  ingot:'Umbracite Ingot', ingotQty:4,
-       ropeId:'471802228',   rope:'Magnificent Rope',
-       plankId:'1227914325', plank:'Magnificent Plank',
-       leatherId:'478917',   leather:'Magnificent Leather Treatment' },
-  10: { tool:'Astralite Tool', action:'Upgrade T9→T10',
-        ingotId:'2069757207', ingot:'Astralite Ingot', ingotQty:4,
+  1:  { tool:'Ferralith Tool',  action:'Initial craft',
+        ingotId:'1050001',    ingot:'Ferralith Ingot',              ingotQty:4,
+        ropeId:'1090004',     rope:'Rough Rope',
+        plankId:'1020003',    plank:'Rough Plank',
+        leatherId:'1070004',  leather:'Rough Leather' },
+  2:  { tool:'Pyrelite Tool',   action:'Upgrade T1→T2',
+        ingotId:'2050001',    ingot:'Pyrelite Ingot',               ingotQty:4,
+        ropeId:'2090004',     rope:'Simple Rope',
+        plankId:'2020003',    plank:'Simple Plank',
+        leatherId:'2070004',  leather:'Simple Leather' },
+  3:  { tool:'Emarium Tool',    action:'Upgrade T2→T3',
+        ingotId:'3050001',    ingot:'Emarium Ingot',                ingotQty:4,
+        ropeId:'3090004',     rope:'Sturdy Rope',
+        plankId:'3020003',    plank:'Sturdy Plank',
+        leatherId:'3070004',  leather:'Sturdy Leather' },
+  4:  { tool:'Elenvar Tool',    action:'Upgrade T3→T4',
+        ingotId:'4050001',    ingot:'Elenvar Ingot',                ingotQty:4,
+        ropeId:'4090004',     rope:'Fine Rope',
+        plankId:'4020003',    plank:'Fine Plank',
+        leatherId:'4070004',  leather:'Fine Leather' },
+  5:  { tool:'Luminite Tool',   action:'Upgrade T4→T5',
+        ingotId:'5050001',    ingot:'Luminite Ingot',               ingotQty:4,
+        ropeId:'5090004',     rope:'Exquisite Rope',
+        plankId:'5020003',    plank:'Exquisite Plank',
+        leatherId:'5070004',  leather:'Exquisite Leather' },
+  6:  { tool:'Rathium Tool',    action:'Upgrade T5→T6',
+        ingotId:'6050001',    ingot:'Rathium Ingot',                ingotQty:4,
+        ropeId:'6090004',     rope:'Peerless Rope',
+        plankId:'6020003',    plank:'Peerless Plank',
+        leatherId:'6070004',  leather:'Peerless Leather' },
+  7:  { tool:'Aurumite Tool',   action:'Upgrade T6→T7',
+        ingotId:'1899017490', ingot:'Aurumite Ingot',               ingotQty:4,
+        ropeId:'625147590',   rope:'Ornate Rope',
+        plankId:'1639308227', plank:'Ornate Plank',
+        leatherId:'806992520',leather:'Ornate Leather' },
+  8:  { tool:'Celestium Tool',  action:'Upgrade T7→T8',
+        ingotId:'1464752960', ingot:'Celestium Ingot',              ingotQty:4,
+        ropeId:'1224328894',  rope:'Pristine Rope',
+        plankId:'28056473',   plank:'Pristine Plank',
+        leatherId:'1743778001',leather:'Pristine Leather' },
+  9:  { tool:'Umbracite Tool',  action:'Upgrade T8→T9',
+        ingotId:'445742898',  ingot:'Umbracite Ingot',              ingotQty:4,
+        ropeId:'471802228',   rope:'Magnificent Rope',
+        plankId:'1227914325', plank:'Magnificent Plank',
+        leatherId:'478917',   leather:'Magnificent Leather Treatment' },
+  10: { tool:'Astralite Tool',  action:'Upgrade T9→T10',
+        ingotId:'2069757207', ingot:'Astralite Ingot',              ingotQty:4,
         ropeId:'547017087',   rope:'Flawless Rope',
         plankId:'117329467',  plank:'Flawless Plank',
-        leatherId:'944952036', leather:'Flawless Leather Treatment' },
+        leatherId:'944952036',leather:'Flawless Leather Treatment' },
 };
 
 const Q_COLOR = {
@@ -335,38 +389,232 @@ const Q_COLOR = {
   Epic:'#AD46FF', Legendary:'#FF6900', Mythic:'#D1D5DC',
 };
 
-// ── Prices (loaded from tool_prices.json) ────────────────────────────────────
+// ── Market data ───────────────────────────────────────────────────────────────
 
-let prices = {};   // item_id → medianSellPrice
+// rawOrders: itemId → [{price, qty, regionId, regionName}]
+let rawOrders = {};
+let marketFetchedAt = null;
+let lastRefreshTime = 0;        // timestamp ms
+let refreshCooldownTimer = null;
 
-async function loadPrices() {
-  try {
-    const r = await fetch('data/tool_prices.json');
-    const data = await r.json();
-    for (const [id, entry] of Object.entries(data)) {
-      if (id === '__meta__') continue;
-      prices[id] = entry.medianSellPrice ?? null;
-    }
-    const meta = data.__meta__ || {};
-    document.getElementById('price-note').textContent =
-      `Prices: median sell. Last updated: ${meta.built_at ? new Date(meta.built_at).toLocaleString() : 'unknown'}.`;
-    document.getElementById('btn-optimize').disabled = false;
-  } catch (e) {
-    document.getElementById('price-note').textContent = 'Could not load price data.';
+// selectedRegions: Set of region IDs (integers). null = all regions.
+let selectedRegions = null;     // null means "all"
+let allRegions = [];            // [{id, name, players}]
+
+/** Compute a single price for an item based on current mode and region filter. */
+function computePrice(itemId) {
+  let orders = rawOrders[itemId];
+  if (!orders || orders.length === 0) return null;
+
+  // Apply region filter
+  if (selectedRegions !== null && selectedRegions.size > 0) {
+    orders = orders.filter(o => selectedRegions.has(o.regionId));
+  } else if (selectedRegions !== null && selectedRegions.size === 0) {
+    return null; // no regions selected
   }
-  calculate();
-}
 
-function costPerCraft(t) {
-  const s = STEP_DATA[t];
-  const p = id => prices[id] ?? 0;
-  return s.ingotQty * p(s.ingotId) + 2 * p(s.ropeId) + 2 * p(s.plankId) + 2 * p(s.leatherId);
+  if (orders.length === 0) return null;
+
+  const mode = document.querySelector('input[name="pricing-mode"]:checked')?.value || 'median';
+
+  if (mode === 'median') {
+    // Median by listing count (not quantity-weighted)
+    const sorted = [...orders].sort((a, b) => a.price - b.price);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+      ? (sorted[mid - 1].price + sorted[mid].price) / 2
+      : sorted[mid].price;
+  }
+
+  if (mode === 'vwap') {
+    let sumPQ = 0, sumQ = 0;
+    for (const o of orders) { sumPQ += o.price * o.qty; sumQ += o.qty; }
+    return sumQ > 0 ? sumPQ / sumQ : null;
+  }
+
+  if (mode === 'trimmed') {
+    // Compute median first, then exclude orders > 3× median, then VWAP
+    const sorted = [...orders].sort((a, b) => a.price - b.price);
+    const mid = Math.floor(sorted.length / 2);
+    const median = sorted.length % 2 === 0
+      ? (sorted[mid - 1].price + sorted[mid].price) / 2
+      : sorted[mid].price;
+    const trimmed = orders.filter(o => o.price <= 3 * median);
+    if (trimmed.length === 0) return median;
+    let sumPQ = 0, sumQ = 0;
+    for (const o of trimmed) { sumPQ += o.price * o.qty; sumQ += o.qty; }
+    return sumQ > 0 ? sumPQ / sumQ : null;
+  }
+
+  if (mode === 'fill') {
+    // Cost to fill: VWAP of cheapest listings needed to cover at least 10 units
+    const sorted = [...orders].sort((a, b) => a.price - b.price);
+    const TARGET_QTY = 10;
+    let sumPQ = 0, sumQ = 0;
+    for (const o of sorted) {
+      const take = Math.min(o.qty, TARGET_QTY - sumQ);
+      if (take <= 0) break;
+      sumPQ += o.price * take;
+      sumQ  += take;
+    }
+    return sumQ > 0 ? sumPQ / sumQ : null;
+  }
+
+  return null;
 }
 
 function hasPrices(t) {
   const s = STEP_DATA[t];
-  return [s.ingotId, s.ropeId, s.plankId, s.leatherId].every(id => prices[id] != null);
+  return [s.ingotId, s.ropeId, s.plankId, s.leatherId].every(id => computePrice(id) != null);
 }
+
+function costPerCraft(t) {
+  const s = STEP_DATA[t];
+  const p = id => computePrice(id) ?? 0;
+  return s.ingotQty * p(s.ingotId) + 2 * p(s.ropeId) + 2 * p(s.plankId) + 2 * p(s.leatherId);
+}
+
+/** Fetch raw orders from the batch API. */
+async function fetchMarketData(userInitiated = false) {
+  const now = Date.now();
+  if (userInitiated) {
+    const elapsed = now - lastRefreshTime;
+    const cooldown = 60_000;
+    if (elapsed < cooldown) {
+      const remaining = Math.ceil((cooldown - elapsed) / 1000);
+      setRefreshStatus(`Wait ${remaining}s before refreshing.`);
+      startCooldownDisplay();
+      return;
+    }
+  }
+
+  lastRefreshTime = now;
+  setRefreshStatus('Fetching market data…');
+  document.getElementById('btn-refresh').disabled = true;
+
+  try {
+    const r = await fetch('/api/market_batch');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    rawOrders = data.items || {};
+    marketFetchedAt = data.fetched_at || null;
+    const ts = marketFetchedAt ? new Date(marketFetchedAt).toLocaleString() : 'unknown';
+    setRefreshStatus(`Updated: ${ts}`);
+    document.getElementById('price-note').textContent =
+      `Prices: ${getPricingModeLabel()}. Last updated: ${ts}`;
+    document.getElementById('btn-optimize').disabled = false;
+  } catch (e) {
+    setRefreshStatus('Could not load market data.');
+    document.getElementById('price-note').textContent = 'Could not load market data.';
+  }
+
+  startCooldownDisplay();
+  calculate();
+}
+
+function getPricingModeLabel() {
+  const mode = document.querySelector('input[name="pricing-mode"]:checked')?.value || 'median';
+  return { median: 'median sell', vwap: 'raw VWAP', trimmed: 'trimmed VWAP', fill: 'cost to fill' }[mode];
+}
+
+function setRefreshStatus(msg) {
+  document.getElementById('refresh-status').textContent = msg;
+}
+
+function startCooldownDisplay() {
+  if (refreshCooldownTimer) clearInterval(refreshCooldownTimer);
+  const btn = document.getElementById('btn-refresh');
+  refreshCooldownTimer = setInterval(() => {
+    const elapsed = Date.now() - lastRefreshTime;
+    const remaining = Math.ceil((60_000 - elapsed) / 1000);
+    if (remaining <= 0) {
+      clearInterval(refreshCooldownTimer);
+      refreshCooldownTimer = null;
+      btn.disabled = false;
+    } else {
+      btn.disabled = true;
+    }
+  }, 500);
+}
+
+// ── Region selector ───────────────────────────────────────────────────────────
+
+async function loadRegions() {
+  try {
+    const r = await fetch('/api/regions');
+    const data = await r.json();
+    allRegions = data.regions || [];
+  } catch (e) {
+    allRegions = [];
+  }
+  renderRegionGrid();
+}
+
+function renderRegionGrid() {
+  const grid = document.getElementById('region-grid');
+  grid.innerHTML = '';
+  if (allRegions.length === 0) {
+    grid.innerHTML = '<span style="color:var(--fg-dim);font-size:11px">No regions found.</span>';
+    return;
+  }
+
+  // Sort descending so the numpad layout shows higher IDs at top
+  const sorted = [...allRegions].sort((a, b) => b.id - a.id);
+
+  for (const region of sorted) {
+    const btn = document.createElement('button');
+    btn.className = 'region-btn active';  // default all active
+    btn.dataset.regionId = region.id;
+    btn.title = region.name || `Region ${region.id}`;
+    btn.textContent = region.id;
+    btn.addEventListener('click', () => {
+      btn.classList.toggle('active');
+      syncSelectedRegions();
+      calculate();
+    });
+    grid.appendChild(btn);
+  }
+
+  syncSelectedRegions();
+}
+
+function syncSelectedRegions() {
+  const btns = document.querySelectorAll('.region-btn');
+  const activeIds = [...btns].filter(b => b.classList.contains('active')).map(b => parseInt(b.dataset.regionId));
+  const allIds    = [...btns].map(b => parseInt(b.dataset.regionId));
+
+  if (activeIds.length === allIds.length) {
+    selectedRegions = null; // all selected = no filter
+  } else {
+    selectedRegions = new Set(activeIds);
+  }
+}
+
+document.getElementById('btn-regions-all').addEventListener('click', () => {
+  document.querySelectorAll('.region-btn').forEach(b => b.classList.add('active'));
+  syncSelectedRegions();
+  calculate();
+});
+
+document.getElementById('btn-regions-none').addEventListener('click', () => {
+  document.querySelectorAll('.region-btn').forEach(b => b.classList.remove('active'));
+  syncSelectedRegions();
+  calculate();
+});
+
+// Pricing mode
+document.getElementById('pricing-modes').addEventListener('change', () => {
+  document.querySelectorAll('.pricing-mode-opt').forEach(el => {
+    el.classList.toggle('selected', el.querySelector('input').checked);
+  });
+  const ts = marketFetchedAt ? new Date(marketFetchedAt).toLocaleString() : 'unknown';
+  document.getElementById('price-note').textContent =
+    `Prices: ${getPricingModeLabel()}. Last updated: ${ts}`;
+  calculate();
+});
+
+// Refresh button
+document.getElementById('btn-refresh').addEventListener('click', () => fetchMarketData(true));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -402,7 +650,6 @@ function fmtPct(p) {
 }
 
 // ── Markov engine (pure, no DOM access) ──────────────────────────────────────
-// keepSets: { [tier]: Set<quality> }  — missing tier = keep all
 
 function runMarkov(targetTier, targetQuality, keepSets) {
   let dist = applyTransition({ Common: 1.0 }); // T1 initial craft always Common
@@ -428,27 +675,21 @@ function runMarkov(targetTier, targetQuality, keepSets) {
 
   let totalCost = 0;
   let totalCrafts = 0;
-  const tierCrafts = {};
   for (let t = 1; t <= targetTier; t++) {
     const crafts = (survivalRates[t] ?? 0) * expectedChains;
-    tierCrafts[t] = crafts;
     totalCrafts += crafts;
     totalCost += crafts * costPerCraft(t);
   }
 
-  return { dist, survivalRates, pTarget, expectedChains, totalCost, totalCrafts, tierCrafts };
+  return { dist, survivalRates, pTarget, expectedChains, totalCost, totalCrafts };
 }
 
 // ── Optimizer ─────────────────────────────────────────────────────────────────
-// Optimal strategy is always a threshold: upgrade all qualities ≥ some minimum.
-// (Same upgrade cost regardless of quality; higher quality → strictly better expected value.)
-// We enumerate all per-tier threshold combinations.
 
 function optimize(targetTier, targetQuality) {
   let bestCost = Infinity;
   let bestKeepSets = null;
 
-  // T1 always Uncommon; T2 reachable = transition targets of Uncommon
   const initialReachable = new Set(Object.keys(TRANSITION['Common']));
 
   function enumerate(t, keepSets, reachableAtT) {
@@ -466,7 +707,6 @@ function optimize(targetTier, targetQuality) {
     for (let i = 0; i < qs.length; i++) {
       const kept = new Set(qs.slice(i));
       keepSets[t] = kept;
-      // Compute reachable at t+1 from kept
       const nextReachable = new Set();
       for (const q of kept) {
         for (const nextQ of Object.keys(TRANSITION[q] ?? {})) {
@@ -483,9 +723,8 @@ function optimize(targetTier, targetQuality) {
 }
 
 function computeReachable(targetTier, keepSets) {
-  // Returns {tier: Set<quality>} for tiers 2..targetTier
   const reachable = {};
-  let current = new Set(Object.keys(TRANSITION['Common'])); // T2 always {Common, Uncommon}
+  let current = new Set(Object.keys(TRANSITION['Common']));
   reachable[2] = current;
   for (let t = 2; t <= targetTier - 1; t++) {
     const kept = keepSets[t]
@@ -510,20 +749,13 @@ function buildRarityDropdown() {
   const sel = document.getElementById('target-rarity');
   const prev = sel.value;
   sel.innerHTML = '';
-  if (!tierVal) {
-    const blank = document.createElement('option');
-    blank.value = '';
-    blank.textContent = '— select quality —';
-    sel.appendChild(blank);
-    updateRarityColor();
-    return;
-  }
-  const targetTier = parseInt(tierVal);
-  const qs = TIER_QUALITIES[targetTier] || [];
   const blankOpt = document.createElement('option');
   blankOpt.value = '';
   blankOpt.textContent = '— select quality —';
   sel.appendChild(blankOpt);
+  if (!tierVal) return;
+  const targetTier = parseInt(tierVal);
+  const qs = TIER_QUALITIES[targetTier] || [];
   for (const q of qs) {
     const opt = document.createElement('option');
     opt.value = q;
@@ -531,12 +763,6 @@ function buildRarityDropdown() {
     sel.appendChild(opt);
   }
   sel.value = qs.includes(prev) ? prev : '';
-  updateRarityColor();
-}
-
-function updateRarityColor() {
-  const sel = document.getElementById('target-rarity');
-  sel.className = `q-${sel.value}`;
 }
 
 // ── Filter UI ─────────────────────────────────────────────────────────────────
@@ -547,7 +773,6 @@ function buildFilters(forcedStates = null) {
   const targetTier = parseInt(tierVal);
   const container  = document.getElementById('filter-container');
 
-  // 1. Save current checkbox states before wiping DOM
   const savedStates = {};
   for (let t = 2; t <= targetTier - 1; t++) {
     savedStates[t] = {};
@@ -557,7 +782,6 @@ function buildFilters(forcedStates = null) {
     }
   }
 
-  // 2. Build keepSets for reachability computation
   const keepSets = {};
   for (let t = 2; t <= targetTier - 1; t++) {
     if (forcedStates) {
@@ -569,10 +793,8 @@ function buildFilters(forcedStates = null) {
     }
   }
 
-  // 3. Compute reachable qualities per tier
   const reachable = computeReachable(targetTier, keepSets);
 
-  // 4. Rebuild chips
   container.innerHTML = '';
   if (targetTier <= 2) {
     container.innerHTML = '<span class="hint">No intermediate tiers to filter.</span>';
@@ -634,19 +856,6 @@ function readKeepSets(targetTier) {
   return keepSets;
 }
 
-function applyKeepSetsToUI(targetTier, keepSets) {
-  for (let t = 2; t <= targetTier - 1; t++) {
-    for (const q of TIER_QUALITIES[t] || []) {
-      const cb    = document.getElementById(`keep-t${t}-${q}`);
-      const label = cb?.closest('label');
-      if (!cb) continue;
-      const checked = (keepSets[t] ?? new Set(TIER_QUALITIES[t])).has(q);
-      cb.checked = checked;
-      label?.classList.toggle('unchecked', !checked);
-    }
-  }
-}
-
 // ── Calculate (render) ────────────────────────────────────────────────────────
 
 function calculate() {
@@ -656,18 +865,13 @@ function calculate() {
   const targetTier = parseInt(tierVal);
   const keepSets   = readKeepSets(targetTier);
 
-  const { dist, survivalRates, pTarget, expectedChains, totalCost, totalCrafts, tierCrafts }
+  const { dist, survivalRates, pTarget, expectedChains, totalCost, totalCrafts }
     = runMarkov(targetTier, targetQuality, keepSets);
 
-  const qColor = Q_COLOR[targetQuality] || 'var(--fg)';
-
-  // ── Summary title & metrics ──
-  document.getElementById('m-prob-label').textContent = `P(${targetQuality}) per chain`;
-
-  const setMetric = (id, val, color) => {
+  const setMetric = (id, val) => {
     const el = document.getElementById(id);
     el.textContent = val;
-    el.style.color = color || '';
+    el.style.color = '';
     el.className   = 'metric-val' + (val === '∞' ? ' impossible' : '');
   };
 
@@ -675,39 +879,42 @@ function calculate() {
   const nChainsConf = pTarget > 0 ? Math.ceil(Math.log(1 - confPct / 100) / Math.log(1 - pTarget)) : Infinity;
   const confScale   = pTarget > 0 ? nChainsConf / expectedChains : 0;
 
-  document.getElementById('summary-title').innerHTML =
-    `At ${confPct}% Confidence — 1 <span style="color:${qColor}">${targetQuality}</span> ${STEP_DATA[targetTier].tool}`;
+  document.getElementById('summary-title').textContent =
+    `At ${confPct}% Confidence — 1 ${targetQuality} ${STEP_DATA[targetTier].tool}`;
 
-  setMetric('m-prob',         fmtPct(pTarget), pTarget > 0 ? qColor : '');
-  setMetric('m-conf-chains',  pTarget > 0 ? fmt(nChainsConf) : '∞', pTarget > 0 ? qColor : '');
+  document.getElementById('m-prob-label').textContent = `P(${targetQuality}) per tool roll`;
+  setMetric('m-prob',         fmtPct(pTarget));
+  setMetric('m-conf-chains',  pTarget > 0 ? fmt(nChainsConf) : '∞');
   setMetric('m-total-crafts', pTarget > 0 ? fmt(totalCrafts * confScale) : '∞');
-  setMetric('m-total-cost',   pTarget > 0 ? fmtCost(totalCost * confScale) : '∞', pTarget > 0 ? qColor : '');
-  document.getElementById('m-conf-label').textContent = `Chains at ${confPct}%`;
+  setMetric('m-total-cost',   pTarget > 0 ? fmtCost(totalCost * confScale) : '∞');
+  document.getElementById('m-conf-label').textContent = `Tool Rolls at ${confPct}%`;
   document.getElementById('formula-conf').textContent = confPct;
 
   // ── Materials table ──
   const tbody = document.getElementById('results-body');
   tbody.innerHTML = '';
 
-  let totIngots = 0, totRope = 0, totPlank = 0, totLeather = 0, totCost = 0;
+  let totCost = 0;
+  let totCrafts = 0;
 
   for (let t = 1; t <= targetTier; t++) {
-    const step   = STEP_DATA[t];
-    const crafts = (survivalRates[t] ?? 0) * (pTarget > 0 ? nChainsConf : 0);
+    const step    = STEP_DATA[t];
+    const crafts  = (survivalRates[t] ?? 0) * (pTarget > 0 ? nChainsConf : 0);
     const ingots  = crafts * step.ingotQty;
     const rope    = crafts * 2;
     const plank   = crafts * 2;
     const leather = crafts * 2;
     const cpc     = costPerCraft(t);
     const tierCost = crafts * cpc;
+    const missing  = !hasPrices(t);
 
-    totIngots  += ingots;
-    totRope    += rope;
-    totPlank   += plank;
-    totLeather += leather;
-    totCost    += tierCost;
+    totCost   += tierCost;
+    totCrafts += crafts;
 
-    const missingPrice = !hasPrices(t);
+    const pIngot   = missing ? null : computePrice(step.ingotId);
+    const pRope    = missing ? null : computePrice(step.ropeId);
+    const pPlank   = missing ? null : computePrice(step.plankId);
+    const pLeather = missing ? null : computePrice(step.leatherId);
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -718,12 +925,12 @@ function calculate() {
       </td>
       <td class="num">${fmt(crafts)}</td>
       <td class="num" style="color:var(--fg-dim)">${((survivalRates[t] ?? 0) * 100).toFixed(1)}%</td>
-      <td class="num">${fmt(ingots)}<span class="mat-name">${step.ingot}</span>${missingPrice ? '' : `<span class="mat-price">${fmtCost(prices[step.ingotId] ?? 0)} ea</span>`}</td>
-      <td class="num">${fmt(rope)}<span class="mat-name">${step.rope}</span>${missingPrice ? '' : `<span class="mat-price">${fmtCost(prices[step.ropeId] ?? 0)} ea</span>`}</td>
-      <td class="num">${fmt(plank)}<span class="mat-name">${step.plank}</span>${missingPrice ? '' : `<span class="mat-price">${fmtCost(prices[step.plankId] ?? 0)} ea</span>`}</td>
-      <td class="num">${fmt(leather)}<span class="mat-name">${step.leather}</span>${missingPrice ? '' : `<span class="mat-price">${fmtCost(prices[step.leatherId] ?? 0)} ea</span>`}</td>
-      <td class="num">${missingPrice ? '—' : fmtCost(cpc)}</td>
-      <td class="num" style="color:${qColor}">${missingPrice ? '—' : fmtCost(tierCost)}</td>`;
+      <td class="num">${fmt(ingots)}<span class="mat-name">${step.ingot}</span>${pIngot != null ? `<span class="mat-price">${fmtCost(pIngot)} ea</span>` : ''}</td>
+      <td class="num">${fmt(rope)}<span class="mat-name">${step.rope}</span>${pRope != null ? `<span class="mat-price">${fmtCost(pRope)} ea</span>` : ''}</td>
+      <td class="num">${fmt(plank)}<span class="mat-name">${step.plank}</span>${pPlank != null ? `<span class="mat-price">${fmtCost(pPlank)} ea</span>` : ''}</td>
+      <td class="num">${fmt(leather)}<span class="mat-name">${step.leather}</span>${pLeather != null ? `<span class="mat-price">${fmtCost(pLeather)} ea</span>` : ''}</td>
+      <td class="num">${missing ? '—' : fmtCost(cpc)}</td>
+      <td class="num">${missing ? '—' : fmtCost(tierCost)}</td>`;
     tbody.appendChild(tr);
   }
 
@@ -731,33 +938,15 @@ function calculate() {
   totRow.className = 'totals-row';
   totRow.innerHTML = `
     <td colspan="2">Total</td>
-    <td class="num">${fmt(totalCrafts)}</td>
+    <td class="num">${fmt(totCrafts)}</td>
     <td class="num"></td>
     <td class="num"></td>
     <td class="num"></td>
     <td class="num"></td>
     <td class="num"></td>
     <td class="num">—</td>
-    <td class="num" style="color:${qColor}">${fmtCost(totCost)}</td>`;
+    <td class="num">${fmtCost(totCost)}</td>`;
   tbody.appendChild(totRow);
-
-  // ── Quality distribution ──
-  const breakdown = document.getElementById('prob-breakdown');
-  breakdown.innerHTML = '';
-  let shown = 0;
-  for (const q of QUALITIES) {
-    const p = dist[q] || 0;
-    if (p < 1e-12) continue;
-    shown++;
-    const isTarget = q === targetQuality;
-    const row = document.createElement('div');
-    row.className = 'prob-row' + (isTarget ? ' is-target' : '');
-    row.innerHTML = `
-      <span class="prob-q" style="color:${Q_COLOR[q]||'var(--fg)'}">${q}</span>
-      <span class="prob-pct">${fmtPct(p)} &nbsp;(1 in ${fmt(1 / p)})</span>`;
-    breakdown.appendChild(row);
-  }
-  if (!shown) breakdown.innerHTML = '<span style="color:var(--fg-dim);font-size:12px">No reachable qualities — check filters.</span>';
 }
 
 // ── Optimize button ───────────────────────────────────────────────────────────
@@ -776,7 +965,6 @@ document.getElementById('btn-optimize').addEventListener('click', () => {
   buildFilters(keepSets);
   calculate();
 
-  // Describe the optimal thresholds
   const parts = [];
   for (let t = 2; t <= targetTier - 1; t++) {
     const qs = TIER_QUALITIES[t];
@@ -798,7 +986,6 @@ document.getElementById('target-tier').addEventListener('change', () => {
 });
 
 document.getElementById('target-rarity').addEventListener('change', () => {
-  updateRarityColor();
   document.getElementById('optimize-note').textContent = '';
   calculate();
 });
@@ -807,7 +994,8 @@ document.getElementById('confidence-pct').addEventListener('input', () => calcul
 
 buildRarityDropdown();
 buildFilters();
-loadPrices(); // async; calls calculate() when done
+loadRegions();         // async; renders region grid
+fetchMarketData();     // async; fetches prices then calls calculate()
 </script>
 
 </body>
