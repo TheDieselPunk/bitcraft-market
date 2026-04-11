@@ -34,11 +34,10 @@
     main {
       max-width: 1500px; margin: 0 auto; padding: 20px 24px;
       display: grid; grid-template-columns: 300px 1fr; gap: 20px;
-      align-items: stretch;
+      align-items: start;
     }
-    /* Both panels are flex columns so the chart can fill remaining height */
-    main > div { display: flex; flex-direction: column; }
-    #chart-card-curve { flex: 1; min-height: 180px; display: flex; flex-direction: column; }
+    /* Chart card height is set by JS; canvas fills it */
+    #chart-card-curve { display: flex; flex-direction: column; min-height: 150px; }
     #chart-card-curve canvas { flex: 1; min-height: 0; }
 
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
@@ -963,8 +962,24 @@ const vLinePlugin = {
   },
 };
 
+function alignChartHeight() {
+  const leftPanel = document.querySelector('main > div:first-child');
+  const chartCard = document.getElementById('chart-card-curve');
+  const matsCard  = document.getElementById('results-body').closest('.card');
+  // Reset so the left panel can settle at its natural height first
+  chartCard.style.height = '';
+  requestAnimationFrame(() => {
+    const leftH  = leftPanel.offsetHeight;
+    const matsH  = matsCard.offsetHeight;
+    const margin = parseFloat(getComputedStyle(matsCard).marginBottom) || 14;
+    const h = leftH - matsH - margin;
+    if (h > 150) chartCard.style.height = h + 'px';
+  });
+}
+
 function updateCharts(pTarget, nChainsConf, confPct, tierCostData) {
   updateCurveChart(pTarget, nChainsConf, confPct);
+  alignChartHeight();
 }
 
 function updateCurveChart(pTarget, nChainsConf, confPct) {
@@ -1091,6 +1106,7 @@ buildRarityDropdown();
 buildFilters();
 loadRegions();         // async; renders region grid
 fetchMarketData();     // async; fetches prices then calls calculate()
+window.addEventListener('resize', alignChartHeight);
 </script>
 
 </body>
