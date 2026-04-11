@@ -119,13 +119,6 @@
     .btn-optimize:disabled { border-color: var(--border); color: var(--fg-dim); cursor: not-allowed; }
     .optimize-note { font-size: 11px; color: var(--green); margin-top: 8px; min-height: 16px; }
 
-    /* Metrics */
-    .metrics-row { display: flex; gap: 12px; flex-wrap: wrap; }
-    .metric-box { background: var(--surface2); border-radius: 6px; padding: 10px 16px; text-align: center; flex: 1; min-width: 80px; }
-    .metric-val   { font-size: 20px; font-weight: 700; color: var(--accent2); line-height: 1.1; }
-    .metric-label { font-size: 10px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
-    .metric-val.impossible { color: var(--fg-dim); font-size: 14px; }
-
     /* Table */
     .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -249,34 +242,7 @@
   <!-- ── Right panel ── -->
   <div>
     <div class="card">
-      <div class="card-title" id="summary-title">Expected Cost — 1 Target Tool</div>
-      <div class="metrics-row">
-        <div class="metric-box">
-          <div class="metric-val" id="m-prob">—</div>
-          <div class="metric-label" id="m-prob-label">P(target) per tool roll</div>
-        </div>
-        <div class="metric-box">
-          <div class="metric-val" id="m-conf-chains">—</div>
-          <div class="metric-label" id="m-conf-label">Tool Rolls at 63%</div>
-        </div>
-        <div class="metric-box">
-          <div class="metric-val" id="m-total-crafts">—</div>
-          <div class="metric-label">Total Crafts</div>
-        </div>
-        <div class="metric-box">
-          <div class="metric-val" id="m-total-cost">—</div>
-          <div class="metric-label">Est. Market Cost</div>
-        </div>
-      </div>
-      <div class="formula-note">
-        n = ⌈ ln(1 − <em>c</em>) / ln(1 − <em>p</em>) ⌉ &nbsp;·&nbsp;
-        <em>c</em> = confidence &nbsp;·&nbsp; <em>p</em> = P(target) per tool roll &nbsp;·&nbsp;
-        table quantities at <span id="formula-conf">63</span>% confidence
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Material Requirements</div>
+      <div class="card-title" id="summary-title">Material Requirements</div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -299,6 +265,11 @@
         </table>
       </div>
       <p class="price-note" id="price-note"></p>
+      <div class="formula-note">
+        n = ⌈ ln(1 − <em>c</em>) / ln(1 − <em>p</em>) ⌉ &nbsp;·&nbsp;
+        <em>c</em> = confidence &nbsp;·&nbsp; <em>p</em> = P(target) per tool roll &nbsp;·&nbsp;
+        table quantities at <span id="formula-conf">63</span>% confidence
+      </div>
     </div>
   </div>
 </main>
@@ -870,29 +841,14 @@ function calculate() {
   const targetTier = parseInt(tierVal);
   const keepSets   = readKeepSets(targetTier);
 
-  const { dist, survivalRates, pTarget, expectedChains, totalCost, totalCrafts }
+  const { survivalRates, pTarget, expectedChains }
     = runMarkov(targetTier, targetQuality, keepSets);
-
-  const setMetric = (id, val) => {
-    const el = document.getElementById(id);
-    el.textContent = val;
-    el.style.color = '';
-    el.className   = 'metric-val' + (val === '∞' ? ' impossible' : '');
-  };
 
   const confPct = Math.max(1, Math.min(99, parseFloat(document.getElementById('confidence-pct').value) || 63));
   const nChainsConf = pTarget > 0 ? Math.ceil(Math.log(1 - confPct / 100) / Math.log(1 - pTarget)) : Infinity;
-  const confScale   = pTarget > 0 ? nChainsConf / expectedChains : 0;
 
   document.getElementById('summary-title').textContent =
-    `At ${confPct}% Confidence — 1 ${targetQuality} ${STEP_DATA[targetTier].tool}`;
-
-  document.getElementById('m-prob-label').textContent = `P(${targetQuality}) per tool roll`;
-  setMetric('m-prob',         fmtPct(pTarget));
-  setMetric('m-conf-chains',  pTarget > 0 ? fmt(nChainsConf) : '∞');
-  setMetric('m-total-crafts', pTarget > 0 ? fmt(totalCrafts * confScale) : '∞');
-  setMetric('m-total-cost',   pTarget > 0 ? fmtCost(totalCost * confScale) : '∞');
-  document.getElementById('m-conf-label').textContent = `Tool Rolls at ${confPct}%`;
+    `Material Requirements — ${targetQuality} ${STEP_DATA[targetTier].tool} @ ${confPct}% confidence`;
   document.getElementById('formula-conf').textContent = confPct;
 
   // ── Materials table ──
