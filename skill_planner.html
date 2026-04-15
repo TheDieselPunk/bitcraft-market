@@ -121,6 +121,8 @@
       text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
       white-space: nowrap;
     }
+    .options-table th.sortable { cursor: pointer; user-select: none; }
+    .options-table th.sortable:hover { color: var(--fg); }
     .options-table td { padding: 7px 10px; border-top: 1px solid var(--border); vertical-align: top; }
     .options-table tr:hover td { background: var(--surface2); }
 
@@ -225,6 +227,8 @@
   let currentPlayerId = null;
   let currentSkillId  = null;
   let skillsData      = [];
+  let currentOptionsData = null;
+  let optionsSort = { key: 'actions_needed', dir: 'asc' };
 
   // ── Player Search ──────────────────────────────────────────────────────────
 
@@ -331,14 +335,15 @@
   }
 
   function renderOptions(data) {
+    currentOptionsData = data;
     const col = document.getElementById('results-col');
-    const opts = data.options || [];
+    const opts = sortOptions(filterOptionsByRequirements(data.options || []));
     const skill = skillsData.find(s => s.skill_id === currentSkillId) || {};
 
     if (opts.length === 0) {
       col.innerHTML = `<div class="results-empty">
         <div class="big-icon">🔍</div>
-        <div>No recipes found that grant ${data.skill_name} XP.</div>
+        <div>No eligible recipes found that grant ${data.skill_name} XP.</div>
       </div>`;
       return;
     }
@@ -384,11 +389,11 @@
           <table class="options-table">
             <thead>
               <tr>
-                <th>Type</th>
-                <th>Item / Recipe</th>
-                <th class="num">XP / Action</th>
-                <th class="num">Actions Needed</th>
-                <th>Ingredients</th>
+                <th class="sortable" onclick="setOptionsSort('type')">Type${sortIndicator('type')}</th>
+                <th class="sortable" onclick="setOptionsSort('item_name')">Item / Recipe${sortIndicator('item_name')}</th>
+                <th class="num sortable" onclick="setOptionsSort('xp_per_action')">XP / Action${sortIndicator('xp_per_action')}</th>
+                <th class="num sortable" onclick="setOptionsSort('actions_needed')">Actions Needed${sortIndicator('actions_needed')}</th>
+                <th class="sortable" onclick="setOptionsSort('ingredients')">Ingredients${sortIndicator('ingredients')}</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -413,6 +418,60 @@
 
   function escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function filterOptionsByRequirements(opts) {
+    return opts.filter(o => o.level_requirements.every(r => getSkillLevel(r.skill) >= r.level));
+  }
+
+  function getSkillLevel(skillName) {
+    const skill = skillsData.find(s => s.skill_name === skillName);
+    return skill ? skill.current_level : 0;
+  }
+
+  function setOptionsSort(key) {
+    if (optionsSort.key === key) {
+      optionsSort.dir = optionsSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      optionsSort = { key, dir: defaultSortDir(key) };
+    }
+    if (currentOptionsData) renderOptions(currentOptionsData);
+  }
+
+  function defaultSortDir(key) {
+    if (key === 'xp_per_action') return 'desc';
+    return 'asc';
+  }
+
+  function sortIndicator(key) {
+    if (optionsSort.key !== key) return '';
+    return optionsSort.dir === 'asc' ? ' ↑' : ' ↓';
+  }
+
+  function sortOptions(opts) {
+    const dir = optionsSort.dir === 'asc' ? 1 : -1;
+    return [...opts].sort((a, b) => {
+      let cmp = 0;
+      switch (optionsSort.key) {
+        case 'type':
+          cmp = a.type.localeCompare(b.type) || a.item_name.localeCompare(b.item_name);
+          break;
+        case 'item_name':
+          cmp = a.item_name.localeCompare(b.item_name) || a.recipe_name.localeCompare(b.recipe_name);
+          break;
+        case 'xp_per_action':
+          cmp = (a.xp_per_action - b.xp_per_action) || (a.actions_needed - b.actions_needed);
+          break;
+        case 'ingredients':
+          cmp = (a.ingredients.length - b.ingredients.length) || a.item_name.localeCompare(b.item_name);
+          break;
+        case 'actions_needed':
+        default:
+          cmp = (a.actions_needed - b.actions_needed) || (b.xp_per_action - a.xp_per_action);
+          break;
+      }
+      return cmp * dir;
+    });
   }
 
   function setStatus(msg) {
