@@ -533,6 +533,7 @@ def main():
 
     # Build a name lookup for all known items (for chain_calc label resolution)
     item_names = {str(item['id']): item['name'] for item in item_list_raw if item.get('name')}
+    cargo_names = {str(cargo['id']): cargo['name'] for cargo in cargo_list if cargo.get('name')}
 
     output = {
         'extraction_by_item':    extraction_by_item,
@@ -542,6 +543,7 @@ def main():
         'resource_max_health':   resource_max_health,
         'cargo_extraction':      cargo_extraction,
         'item_names':            item_names,
+        'cargo_names':           cargo_names,
         '__meta__': {
             'built_at':              time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'extraction_items':      len(extraction_by_item),

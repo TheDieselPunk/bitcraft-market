@@ -308,8 +308,10 @@ def _format_level_reqs(reqs):
 
 def _lookup_item_name(item_id, recipes, game_data):
     item_id = str(item_id)
-    if item_id in recipes:
-        return recipes[item_id].get('name', item_id)
+    if item_id in recipes and recipes[item_id].get('name'):
+        return recipes[item_id]['name']
+    if item_id in game_data.get('item_names', {}):
+        return game_data['item_names'][item_id]
     for recipe_list in game_data.get('cargo_by_item', {}).values():
         for recipe in recipe_list:
             for consumed in recipe.get('consumed', []):
@@ -320,6 +322,8 @@ def _lookup_item_name(item_id, recipes, game_data):
 
 def _lookup_cargo_name(cargo_id, game_data):
     cargo_id = str(cargo_id)
+    if cargo_id in game_data.get('cargo_names', {}):
+        return game_data['cargo_names'][cargo_id]
     for recipe_list in game_data.get('cargo_by_item', {}).values():
         for recipe in recipe_list:
             if str(recipe.get('cargo_input_id', '')) == cargo_id and recipe.get('cargo_input_name'):
