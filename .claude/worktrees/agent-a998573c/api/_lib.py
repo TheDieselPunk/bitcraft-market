@@ -1,0 +1,285 @@
+"""
+Shared logic for Bitcraft Market Advisor API functions.
+"""
+
+import json
+import os
+import urllib.request
+import urllib.parse
+
+API_BASE = 'https://bitjita.com'
+HEADERS = {
+    'User-Agent': 'BitJita (Billard)',
+    'Accept': 'application/json',
+}
+
+# Path to pre-built recipe cache (populated by GitHub Actions)
+RECIPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'recipes.json')
+GAME_DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'game_data.json')
+
+SKILL_NAMES = {
+    1: 'ANY',            2: 'Forestry',      3: 'Carpentry',   4: 'Masonry',
+    5: 'Mining',         6: 'Smithing',      7: 'Scholar',     8: 'Leatherworking',
+    9: 'Hunting',       10: 'Tailoring',    11: 'Farming',    12: 'Fishing',
+   13: 'Cooking',       14: 'Foraging',     15: 'Construction',
+   17: 'Taming',        18: 'Slayer',       19: 'Merchanting',
+   21: 'Sailing',       22: 'Hexite Gathering',
+}
+
+
+def load_game_data():
+    """Load the supplemental game data cache (extraction mechanics). Returns safe defaults if missing."""
+    try:
+        with open(GAME_DATA_PATH) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {'extraction_by_item': {}, 'resource_max_health': {}}
+
+
+def api_get(path, params=None):
+    url = f'{API_BASE}{path}'
+    if params:
+        url += '?' + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
+    req = urllib.request.Request(url, headers=HEADERS)
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.loads(r.read())
+
+
+def load_recipes_cache():
+    """Load the pre-built recipe cache from disk. Returns empty dict if not found."""
+    try:
+        with open(RECIPES_PATH) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def get_player_id(username):
+    """Look up a player by username and return their entity ID, or None if not found."""
+    data = api_get('/api/players', {'q': username, 'limit': 5})
+    players = data.get('players', [])
+    # Exact match first, then partial
+    for p in players:
+        if p.get('username', '').lower() == username.lower():
+            return str(p['entityId'])
+    if players:
+        return str(players[0]['entityId'])
+    return None
+
+
+def get_toolbelt(player_id):
+    """
+    Fetch player inventories and extract tools from the Toolbelt.
+    Returns {tool_type_int: {level, power, name, tier}}.
+    """
+    data = api_get(f'/api/players/{player_id}/inventories')
+    items_lookup = data.get('items', {})
+    tools = {}
+
+    for bag in data.get('inventories', []):
+        if bag.get('inventoryName', '').lower() != 'toolbelt':
+            continue
+        for pocket in bag.get('pockets', []):
+            contents = pocket.get('contents')
+            if not contents:
+                continue
+            item_id = str(contents['itemId'])
+            info = items_lookup.get(item_id, {})
+            tool_type = info.get('toolType')
+            tool_level = info.get('toolLevel')
+            tool_power = info.get('toolPower') or 0
+            if tool_type is None or tool_level is None:
+                continue
+            if tool_type not in tools or tool_level > tools[tool_type]['level']:
+                tools[tool_type] = {
+                    'level': tool_level,
+                    'power': tool_power,
+                    'name': info.get('name', f'item_{item_id}'),
+                    'tier': info.get('tier'),
+                }
+    return tools
+
+
+def can_extract(recipes, tools):
+    for recipe in recipes.get('extraction', []):
+        reqs = recipe.get('toolRequirements', [])
+        if not reqs:
+            return True
+        if all(
+            tools.get(r['tool_type'], {}).get('level', 0) >= r['level'] and
+            tools.get(r['tool_type'], {}).get('power', 0) >= r['power']
+            for r in reqs
+        ):
+            return True
+    return False
+
+
+def is_unpack_recipe(recipe):
+    return 'unpack' in recipe.get('name', '').lower()
+
+
+def can_self_extract(recipes, item_id, tools):
+    """
+    Some items (e.g. higher-tier fish) have no extraction recipe in the API,
+    but DO have a 'using' recipe where the item is its own ingredient and the
+    recipe carries a tool requirement (e.g. 'Craft Muddy Auratus Products'
+    requires a L2 rod and consumes 1x Muddy Auratus).
+
+    This pattern means: if the player has the right tool they can catch AND
+    process the item in one workflow, making it effectively gatherable.
+    """
+    if recipes.get('extraction'):           # already handled by can_extract
+        return False
+    for recipe in recipes.get('using', []):
+        if is_unpack_recipe(recipe):
+            continue
+        item_ings = [i for i in recipe.get('consumedItemStacks', [])
+                     if i.get('item_type') == 'item']
+        # The item must appear as its own ingredient
+        if not any(str(i['item_id']) == item_id for i in item_ings):
+            continue
+        tool_reqs = recipe.get('toolRequirements', [])
+        if not tool_reqs:
+            continue
+        if all(
+            tools.get(req['tool_type'], {}).get('level', 0) >= req['level'] and
+            tools.get(req['tool_type'], {}).get('power', 0) >= req['power']
+            for req in tool_reqs
+        ):
+            return True
+    return False
+
+
+def can_craft(recipes, tools, obtainable):
+    for recipe in recipes.get('crafting', []):
+        if is_unpack_recipe(recipe):
+            continue
+        item_ings = [i for i in recipe.get('consumedItemStacks', []) if i.get('item_type') == 'item']
+
+        if item_ings:
+            # Normal recipe — all item ingredients must be obtainable
+            if not all(str(i['item_id']) in obtainable for i in item_ings):
+                continue
+        else:
+            # Cargo-only recipe (e.g. "Extract Emarium Ore Piece" from ore chunk cargo).
+            # The cargo is obtained through world mining — check the recipe's own
+            # tool requirements to determine if the player can do it.
+            tool_reqs = recipe.get('toolRequirements', [])
+            if tool_reqs and not all(
+                tools.get(r['tool_type'], {}).get('level', 0) >= r['level'] and
+                tools.get(r['tool_type'], {}).get('power', 0) >= r['power']
+                for r in tool_reqs
+            ):
+                continue
+
+        return True
+    return False
+
+
+def find_craftable_reverse(all_recipes, obtainable):
+    """
+    Find market items craftable via 'recipesUsingItem' on obtainable items.
+    Also follows itemListPossibilities on intermediate 'Products' items.
+    Iterates until stable so multi-step chains are resolved.
+    Returns (craftable, loot) sets of item IDs.
+    """
+    market_item_ids = {iid for iid, r in all_recipes.items() if not r.get('intermediate')}
+    craftable = set()
+    loot      = set()
+
+    changed = True
+    while changed:
+        changed = False
+        current = obtainable | craftable | loot
+        for item_id, recipes in all_recipes.items():
+            if item_id not in current:
+                continue
+            for recipe in recipes.get('using', []):
+                if is_unpack_recipe(recipe):
+                    continue
+                item_ings = [
+                    i for i in recipe.get('consumedItemStacks', [])
+                    if i.get('item_type') == 'item'
+                ]
+                if not item_ings:
+                    continue
+                if not all(str(i['item_id']) in current for i in item_ings):
+                    continue
+                for output in recipe.get('craftedItemStacks', []):
+                    out_id = str(output['item_id'])
+                    if out_id in market_item_ids and out_id not in current:
+                        # Direct market item output (e.g. processed ore → ingot)
+                        craftable.add(out_id)
+                        changed = True
+                    elif out_id in all_recipes and all_recipes[out_id].get('intermediate'):
+                        # Intermediate "Products" box — follow its loot table
+                        for loot_entry in all_recipes[out_id].get('itemListPossibilities', []):
+                            loot_id = str(loot_entry.get('targetId', ''))
+                            if loot_id in market_item_ids and loot_id not in current:
+                                loot.add(loot_id)
+                                changed = True
+    return craftable, loot
+
+
+def classify_items(all_recipes, tools, include_crafting=True):
+    """
+    Given a recipe dict and tools, return (extractable, craftable, source_map).
+    source_map: item_id -> 'gather' | 'craft' | 'loot'
+
+    Three item roles exist in the cache:
+      - market items  (normal entries)  → appear in results
+      - intermediate  (Products boxes)  → used for loot chain only
+      - ingredient    (raw mats w/ no buy orders, e.g. Ore Chunks) →
+                      used to satisfy crafting ingredient checks only;
+                      never appear in the final result set
+    """
+    # Ingredient items that the player can extract — used only for ingredient checks
+    ingredient_extractable = {
+        iid for iid, r in all_recipes.items()
+        if r.get('ingredient') and can_extract(r, tools)
+    }
+
+    # Market items the player can extract directly, or catch via self-referential
+    # using recipes (e.g. higher-tier fish with no API extraction recipe)
+    extractable = {
+        iid for iid, r in all_recipes.items()
+        if not r.get('intermediate') and not r.get('ingredient')
+        and (can_extract(r, tools) or can_self_extract(r, iid, tools))
+    }
+
+    # Combined set used when checking "can I obtain this ingredient?"
+    all_obtainable = extractable | ingredient_extractable
+
+    craftable = set()
+    loot      = set()
+
+    if include_crafting:
+        for iid, r in all_recipes.items():
+            if r.get('intermediate') or r.get('ingredient') or iid in extractable:
+                continue
+            if can_craft(r, tools, all_obtainable):
+                craftable.add(iid)
+        rev_craftable, rev_loot = find_craftable_reverse(all_recipes, all_obtainable)
+        craftable |= rev_craftable
+        loot      |= rev_loot
+
+    source_map = {}
+    for iid in extractable:
+        source_map[iid] = 'gather'
+    for iid in craftable:
+        if iid not in source_map:
+            source_map[iid] = 'craft'
+    for iid in loot:
+        if iid not in source_map:
+            source_map[iid] = 'loot'
+
+    return extractable, craftable | loot, source_map
+
+
+def cors_headers():
+    return {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Content-Type': 'application/json',
+    }

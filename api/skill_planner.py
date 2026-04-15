@@ -147,6 +147,7 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes):
             if xp_per_craft <= 0:
                 continue
             crafts_needed = math.ceil(xp_gap / xp_per_craft) if xp_gap > 0 else 0
+            output_item_id, output_item_name = _get_primary_output(recipe, recipes, item_id, item_name)
 
             # Gather item ingredients (skip cargo-type entries)
             ingredients = []
@@ -164,8 +165,8 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes):
             level_reqs = _format_level_reqs(recipe.get('levelRequirements', []))
             options.append({
                 'type': 'Craft',
-                'item_id': item_id,
-                'item_name': item_name,
+                'item_id': output_item_id,
+                'item_name': output_item_name,
                 'recipe_name': recipe.get('name') or 'Craft',
                 'xp_per_action': xp_per_craft,
                 'actions_needed': crafts_needed,
@@ -199,6 +200,16 @@ def _format_level_reqs(reqs):
         name = SKILL_NAMES.get(sid, str(sid)) if sid else '?'
         result.append({'skill': name, 'level': lv})
     return result
+
+
+def _get_primary_output(recipe, recipes, fallback_item_id, fallback_item_name):
+    """Return the recipe's main output item id/name, falling back to the parent item."""
+    outputs = recipe.get('craftedItemStacks', [])
+    if outputs:
+        output_item_id = str(outputs[0].get('item_id', fallback_item_id))
+        output_item_name = recipes.get(output_item_id, {}).get('name') or fallback_item_name
+        return output_item_id, output_item_name
+    return fallback_item_id, fallback_item_name
 
 
 class handler(BaseHTTPRequestHandler):
