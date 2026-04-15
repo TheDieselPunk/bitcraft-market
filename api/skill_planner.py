@@ -197,7 +197,7 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes, g
                 'type': 'Gather',
                 'item_id': str(cargo_input_id),
                 'item_name': cargo_name,
-                'item_category': _get_item_category(cargo_input_id, cargo_name, recipes),
+                'item_category': _get_item_category(cargo_input_id, cargo_name, recipes, prefer_name=True),
                 'recipe_name': f'Gather {cargo_name}',
                 'xp_per_action': xp_per_cast,
                 'actions_needed': casts_needed,
@@ -288,7 +288,11 @@ def _lookup_cargo_name(cargo_id, game_data):
     return cargo_id
 
 
-def _get_item_category(item_id, item_name, recipes):
+def _get_item_category(item_id, item_name, recipes, prefer_name=False):
+    if prefer_name:
+        inferred = _infer_category_from_name(item_name)
+        if inferred:
+            return inferred
     item = recipes.get(str(item_id), {})
     tag = item.get('tag')
     if tag:
