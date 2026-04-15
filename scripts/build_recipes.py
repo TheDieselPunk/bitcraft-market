@@ -124,6 +124,7 @@ def fetch_intermediate_item(item_id: str) -> dict:
         'tier':                  d['item']['tier'],
         'tag':                   d['item'].get('tag', ''),
         'intermediate':          True,
+        'crafting':              d.get('craftingRecipes', []),
         'itemListPossibilities': d.get('itemListPossibilities', []),
     }
 
@@ -221,7 +222,10 @@ def main():
         if not r.get('intermediate') and not r.get('ingredient')
         for recipe in r.get('using', [])
         for out in recipe.get('craftedItemStacks', [])
+        # Re-fetch if not cached at all, or if cached without crafting data
         if str(out['item_id']) not in updated
+        or (updated.get(str(out['item_id']), {}).get('intermediate')
+            and 'crafting' not in updated.get(str(out['item_id']), {}))
     }
 
     if intermediate_ids:
