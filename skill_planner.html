@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skill Planner — Bitcraft</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #1e1e2e;
+      --surface:   #2a2a3e;
+      --surface2:  #313244;
+      --surface3:  #3a3a50;
+      --accent:    #cba6f7;
+      --accent2:   #89b4fa;
+      --green:     #a6e3a1;
+      --yellow:    #f9e2af;
+      --red:       #f38ba8;
+      --fg:        #cdd6f4;
+      --fg-dim:    #6c7086;
+      --border:    #45475a;
+    }
+
+    body { background: var(--bg); color: var(--fg); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+    /* ── Nav ── */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    header h1 { font-size: 16px; color: var(--accent); font-weight: 700; }
+    header a  { color: var(--fg-dim); font-size: 12px; text-decoration: none; }
+    header a:hover { color: var(--fg); }
+    .nav-sep { color: var(--border); }
+
+    /* ── Layout ── */
+    main {
+      max-width: 1400px; margin: 0 auto; padding: 20px 24px;
+      display: grid; grid-template-columns: 320px 1fr; gap: 20px;
+      align-items: start;
+    }
+
+    /* ── Card ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    .card:last-child { margin-bottom: 0; }
+    .card-title { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; font-weight: 600; }
+
+    /* ── Inputs ── */
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+    .field input, .field select {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 7px 10px; color: var(--fg); font-size: 13px;
+    }
+    .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+    .field input::placeholder { color: var(--fg-dim); }
+
+    .search-row { display: flex; gap: 8px; }
+    .search-row input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; color: var(--fg); font-size: 13px; }
+    .search-row input:focus { outline: none; border-color: var(--accent); }
+    .search-row input::placeholder { color: var(--fg-dim); }
+
+    .search-status { font-size: 11px; color: var(--fg-dim); margin-top: 5px; min-height: 16px; }
+
+    /* ── Buttons ── */
+    .btn {
+      background: var(--accent); color: #1e1e2e;
+      border: none; border-radius: 6px; padding: 8px 16px;
+      font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
+      transition: filter .15s;
+    }
+    .btn:hover { filter: brightness(1.1); }
+    .btn:disabled { background: var(--border); color: var(--fg-dim); cursor: not-allowed; filter: none; }
+    .btn-full { width: 100%; margin-top: 4px; padding: 10px; font-size: 14px; }
+
+    /* ── Skills grid ── */
+    .skills-list { display: flex; flex-direction: column; gap: 6px; }
+    .skill-row {
+      display: grid; grid-template-columns: 1fr auto auto;
+      align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 6px; cursor: pointer;
+      border: 1px solid transparent; transition: background .1s, border-color .1s;
+    }
+    .skill-row:hover { background: var(--surface2); }
+    .skill-row.selected { background: var(--surface2); border-color: var(--accent); }
+    .skill-name { font-size: 13px; font-weight: 600; }
+    .skill-xp   { font-size: 11px; color: var(--fg-dim); text-align: right; }
+    .level-badge {
+      background: var(--surface3); color: var(--accent); border-radius: 4px;
+      padding: 2px 7px; font-size: 11px; font-weight: 700; white-space: nowrap;
+    }
+    .skill-bar-wrap { grid-column: 1 / -1; height: 3px; background: var(--surface3); border-radius: 2px; margin-top: 2px; }
+    .skill-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width .3s; }
+
+    /* ── Target card ── */
+    .target-skill-name { font-size: 15px; font-weight: 700; color: var(--accent); margin-bottom: 10px; }
+    .target-info { font-size: 12px; color: var(--fg-dim); margin-bottom: 12px; line-height: 1.6; }
+    .target-info span { color: var(--fg); }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* ── Right panel ── */
+    .results-col { min-width: 0; }
+    .results-empty {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 48px 24px; text-align: center; color: var(--fg-dim);
+    }
+    .results-empty .big-icon { font-size: 36px; margin-bottom: 10px; }
+
+    /* ── Options table ── */
+    .options-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .options-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 12px; flex-wrap: wrap; }
+    .options-title { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+    .options-meta  { font-size: 12px; color: var(--fg-dim); }
+    .options-meta span { color: var(--accent2); font-weight: 600; }
+
+    .options-table-wrap { overflow-x: auto; }
+    .options-table {
+      width: 100%; border-collapse: collapse; font-size: 12px;
+      border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+    }
+    .options-table th {
+      background: var(--surface2); color: var(--fg-dim); padding: 7px 10px;
+      text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+      white-space: nowrap;
+    }
+    .options-table td { padding: 7px 10px; border-top: 1px solid var(--border); vertical-align: top; }
+    .options-table tr:hover td { background: var(--surface2); }
+
+    .type-badge {
+      display: inline-block; border-radius: 3px; padding: 1px 6px;
+      font-size: 10px; font-weight: 700; white-space: nowrap;
+    }
+    .type-gather { background: #1a3325; color: var(--green); }
+    .type-craft  { background: #1a2a3a; color: var(--accent2); }
+
+    .item-name   { font-weight: 600; color: var(--fg); }
+    .recipe-name { color: var(--fg-dim); font-size: 11px; margin-top: 2px; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .xp-val  { color: var(--yellow); font-weight: 600; }
+    .act-val { color: var(--accent2); font-weight: 700; }
+
+    .ing-list  { display: flex; flex-direction: column; gap: 3px; }
+    .ing-item  { font-size: 11px; color: var(--fg-dim); }
+    .ing-qty   { color: var(--fg); font-weight: 600; }
+    .ing-none  { font-size: 11px; color: var(--fg-dim); font-style: italic; }
+
+    .lvl-reqs  { font-size: 10px; color: var(--fg-dim); margin-top: 3px; }
+
+    /* ── Error / loading ── */
+    .error-box { background: #3a1a1a; border: 1px solid var(--red); border-radius: 8px; padding: 14px 18px; color: var(--red); margin-bottom: 14px; }
+    .spinner-wrap { display: flex; align-items: center; gap: 10px; padding: 32px; color: var(--fg-dim); justify-content: center; }
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: var(--surface); } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<div style="background:#f9e2af;color:#1e1e2e;text-align:center;padding:5px 12px;font-size:12px;font-weight:600;letter-spacing:.04em;">
+  🚧 Under Construction — data and features may change without notice
+</div>
+
+<header>
+  <h1>📈 Skill Planner</h1>
+  <span class="nav-sep">|</span>
+  <a href="/">← Market Advisor</a>
+  <span class="nav-sep">|</span>
+  <a href="/equipment_sim.html">⚙ Equipment Simulator</a>
+  <span class="nav-sep">|</span>
+  <a href="/chain_calc.html">⛓ Chain Calculator</a>
+  <span class="nav-sep">|</span>
+  <a href="/tool_rolling.html">🎲 Tool Rolling</a>
+</header>
+
+<main>
+
+  <!-- ── Left Column ── -->
+  <div class="left-col">
+
+    <!-- Player Search -->
+    <div class="card">
+      <div class="card-title">Player</div>
+      <div class="search-row">
+        <input id="username-input" type="text" placeholder="Enter username…"
+               autocomplete="off" spellcheck="false"
+               onkeydown="if(event.key==='Enter') searchPlayer()" />
+        <button class="btn" id="search-btn" onclick="searchPlayer()">Search</button>
+      </div>
+      <div id="search-status" class="search-status"></div>
+    </div>
+
+    <!-- Skills List (hidden until search) -->
+    <div class="card" id="skills-card" style="display:none">
+      <div class="card-title">Skills — click to plan</div>
+      <div class="skills-list" id="skills-list"></div>
+    </div>
+
+    <!-- Target Level Card (hidden until skill selected) -->
+    <div class="card" id="target-card" style="display:none">
+      <div class="card-title">Target</div>
+      <div id="target-skill-name" class="target-skill-name"></div>
+      <div id="target-info" class="target-info"></div>
+      <div class="two-col">
+        <div class="field">
+          <label>Target Level</label>
+          <input type="number" id="target-level-input" min="1" max="120" step="10" />
+        </div>
+      </div>
+      <button class="btn btn-full" onclick="loadOptions()">Find Options</button>
+    </div>
+
+  </div>
+
+  <!-- ── Right Column ── -->
+  <div class="results-col" id="results-col">
+    <div class="results-empty">
+      <div class="big-icon">📈</div>
+      <div>Search for a player, then click a skill to see leveling options.</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  let currentPlayerId = null;
+  let currentSkillId  = null;
+  let skillsData      = [];
+
+  // ── Player Search ──────────────────────────────────────────────────────────
+
+  async function searchPlayer() {
+    const username = document.getElementById('username-input').value.trim();
+    if (!username) return;
+
+    localStorage.setItem('lastUsername', username);
+    setStatus('Searching…');
+    setSearchBtnDisabled(true);
+
+    try {
+      const res = await fetch(`/api/search?username=${encodeURIComponent(username)}`);
+      if (!res.ok) throw new Error(`Search failed (${res.status})`);
+      const data = await res.json();
+      if (!data.player_id) throw new Error('Player not found');
+
+      currentPlayerId = data.player_id;
+      setStatus(`Found: ${data.username}`);
+      await loadSkills(data.player_id);
+    } catch (err) {
+      setStatus(`Error: ${err.message}`);
+    } finally {
+      setSearchBtnDisabled(false);
+    }
+  }
+
+  async function loadSkills(playerId) {
+    setStatus('Loading skills…');
+    try {
+      const res = await fetch(`/api/skill_planner?player_id=${encodeURIComponent(playerId)}`);
+      if (!res.ok) throw new Error(`Skills fetch failed (${res.status})`);
+      const data = await res.json();
+      skillsData = data.skills || [];
+      renderSkills(skillsData);
+      setStatus('');
+    } catch (err) {
+      setStatus(`Error: ${err.message}`);
+    }
+  }
+
+  function renderSkills(skills) {
+    const list = document.getElementById('skills-list');
+    list.innerHTML = '';
+    for (const s of skills) {
+      const row = document.createElement('div');
+      row.className = 'skill-row';
+      row.dataset.skillId = s.skill_id;
+      row.onclick = () => selectSkill(s);
+      row.innerHTML = `
+        <div class="skill-name">${s.skill_name}</div>
+        <div class="skill-xp">${fmtXp(s.current_xp)} xp</div>
+        <div class="level-badge">Lv ${s.current_level}</div>
+        <div class="skill-bar-wrap">
+          <div class="skill-bar-fill" style="width:${s.progress_pct}%"></div>
+        </div>
+      `;
+      list.appendChild(row);
+    }
+    document.getElementById('skills-card').style.display = '';
+  }
+
+  // ── Skill Selection ────────────────────────────────────────────────────────
+
+  function selectSkill(skill) {
+    currentSkillId = skill.skill_id;
+
+    // Highlight selected row
+    document.querySelectorAll('.skill-row').forEach(r => r.classList.remove('selected'));
+    const row = document.querySelector(`.skill-row[data-skill-id="${skill.skill_id}"]`);
+    if (row) row.classList.add('selected');
+
+    // Populate target card
+    document.getElementById('target-skill-name').textContent = skill.skill_name;
+    document.getElementById('target-info').innerHTML =
+      `Current level: <span>${skill.current_level}</span> &nbsp;|&nbsp; ` +
+      `Current XP: <span>${fmtXp(skill.current_xp)}</span><br>` +
+      `XP to Lv ${skill.next_threshold}: <span>${fmtXp(skill.xp_to_threshold)}</span>`;
+    document.getElementById('target-level-input').value = skill.next_threshold;
+    document.getElementById('target-card').style.display = '';
+
+    // Auto-load options
+    loadOptions();
+  }
+
+  // ── Options Loading ────────────────────────────────────────────────────────
+
+  async function loadOptions() {
+    if (!currentPlayerId || !currentSkillId) return;
+    const targetLevel = parseInt(document.getElementById('target-level-input').value, 10);
+    if (!targetLevel || targetLevel < 1) return;
+
+    showSpinner();
+
+    try {
+      const url = `/api/skill_planner?player_id=${encodeURIComponent(currentPlayerId)}&skill_id=${currentSkillId}&target_level=${targetLevel}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Options fetch failed (${res.status})`);
+      const data = await res.json();
+      renderOptions(data);
+    } catch (err) {
+      showError(err.message);
+    }
+  }
+
+  function renderOptions(data) {
+    const col = document.getElementById('results-col');
+    const opts = data.options || [];
+    const skill = skillsData.find(s => s.skill_id === currentSkillId) || {};
+
+    if (opts.length === 0) {
+      col.innerHTML = `<div class="results-empty">
+        <div class="big-icon">🔍</div>
+        <div>No recipes found that grant ${data.skill_name} XP.</div>
+      </div>`;
+      return;
+    }
+
+    const rows = opts.map(o => {
+      const typeBadge = o.type === 'Gather'
+        ? `<span class="type-badge type-gather">Gather</span>`
+        : `<span class="type-badge type-craft">Craft</span>`;
+
+      const ingHtml = o.ingredients.length > 0
+        ? `<div class="ing-list">${o.ingredients.map(i =>
+            `<div class="ing-item"><span class="ing-qty">${fmtNum(i.quantity)}×</span> ${escHtml(i.item_name)} <span style="color:var(--fg-dim)">(${i.per_craft}/craft)</span></div>`
+          ).join('')}</div>`
+        : `<span class="ing-none">${o.type === 'Gather' ? '—' : 'no items'}</span>`;
+
+      const lvlHtml = o.level_requirements.length > 0
+        ? `<div class="lvl-reqs">Req: ${o.level_requirements.map(r => `${r.skill} ${r.level}`).join(', ')}</div>`
+        : '';
+
+      return `<tr>
+        <td>${typeBadge}</td>
+        <td>
+          <div class="item-name">${escHtml(o.item_name)}</div>
+          <div class="recipe-name">${escHtml(o.recipe_name)}</div>
+          ${lvlHtml}
+        </td>
+        <td class="num xp-val">${fmtXp(o.xp_per_action)}</td>
+        <td class="num act-val">${fmtNum(o.actions_needed)}</td>
+        <td>${ingHtml}</td>
+      </tr>`;
+    }).join('');
+
+    col.innerHTML = `
+      <div class="options-card">
+        <div class="options-header">
+          <div class="options-title">${escHtml(data.skill_name || '')} options → Lv ${data.target_level}</div>
+          <div class="options-meta">
+            XP needed: <span>${fmtXp(data.xp_gap)}</span> &nbsp;|&nbsp;
+            ${opts.length} option${opts.length !== 1 ? 's' : ''}
+          </div>
+        </div>
+        <div class="options-table-wrap">
+          <table class="options-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Item / Recipe</th>
+                <th class="num">XP / Action</th>
+                <th class="num">Actions Needed</th>
+                <th>Ingredients</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function fmtNum(n) {
+    if (n == null) return '—';
+    return Math.round(n).toLocaleString();
+  }
+
+  function fmtXp(n) {
+    if (n == null || n === 0) return '0';
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(2).replace(/\.?0+$/, '') + 'M';
+    if (n >= 1_000)     return (n / 1_000).toFixed(1).replace(/\.?0+$/, '') + 'K';
+    return n.toLocaleString(undefined, {maximumFractionDigits: 1});
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function setStatus(msg) {
+    document.getElementById('search-status').textContent = msg;
+  }
+
+  function setSearchBtnDisabled(v) {
+    document.getElementById('search-btn').disabled = v;
+  }
+
+  function showSpinner() {
+    document.getElementById('results-col').innerHTML = `
+      <div class="spinner-wrap"><div class="spinner"></div> Loading options…</div>`;
+  }
+
+  function showError(msg) {
+    document.getElementById('results-col').innerHTML = `
+      <div class="error-box">Error: ${escHtml(msg)}</div>`;
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+
+  window.addEventListener('DOMContentLoaded', () => {
+    const last = localStorage.getItem('lastUsername');
+    if (last) document.getElementById('username-input').value = last;
+  });
+</script>
+</body>
+</html>

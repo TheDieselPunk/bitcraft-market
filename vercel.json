@@ -7,15 +7,17 @@
     { "src": "api/effort.py",       "use": "@vercel/python" },
     { "src": "api/inventories.py",  "use": "@vercel/python" },
     { "src": "api/chain_calc.py",    "use": "@vercel/python" },
-    { "src": "api/market_batch.py", "use": "@vercel/python" },
-    { "src": "data/**",             "use": "@vercel/static" },
-    { "src": "index.html",          "use": "@vercel/static" },
+    { "src": "api/market_batch.py",   "use": "@vercel/python" },
+    { "src": "api/skill_planner.py", "use": "@vercel/python" },
+    { "src": "data/**",              "use": "@vercel/static" },
+    { "src": "index.html",           "use": "@vercel/static" },
     { "src": "app.js",              "use": "@vercel/static" },
     { "src": "equipment_sim.html",  "use": "@vercel/static" },
     { "src": "equipment_sets.js",   "use": "@vercel/static" },
     { "src": "chain_calc.html",     "use": "@vercel/static" },
     { "src": "tool_rolling.html",          "use": "@vercel/static" },
-    { "src": "tool_rolling_rerolling.html", "use": "@vercel/static" }
+    { "src": "tool_rolling_rerolling.html", "use": "@vercel/static" },
+    { "src": "skill_planner.html",         "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/api/search",       "dest": "/api/search.py"       },
@@ -25,7 +27,8 @@
     { "src": "/api/effort",       "dest": "/api/effort.py"       },
     { "src": "/api/inventories",  "dest": "/api/inventories.py"  },
     { "src": "/api/chain_calc",    "dest": "/api/chain_calc.py"    },
-    { "src": "/api/market_batch", "dest": "/api/market_batch.py" },
-    { "src": "/(.*)",             "dest": "/$1"                  }
+    { "src": "/api/market_batch",   "dest": "/api/market_batch.py"   },
+    { "src": "/api/skill_planner", "dest": "/api/skill_planner.py" },
+    { "src": "/(.*)",              "dest": "/$1"                    }
   ]
 }
