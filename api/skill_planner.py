@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 sys.path.insert(0, os.path.dirname(__file__))
-from _lib import api_get, load_recipes_cache, cors_headers, SKILL_NAMES
+from _lib import api_get, load_recipes_cache, load_game_data, cors_headers, SKILL_NAMES
 
 # Module-level cache so warm Lambda instances reuse the table.
 _LEVELS_CACHE = None
@@ -110,7 +110,7 @@ def build_skills_response(xp_map, table):
     return skills
 
 
-def build_options_response(skill_id, current_xp, target_level, table, recipes):
+def build_options_response(skill_id, current_xp, target_level, table, recipes, game_data):
     """Scan all recipes for XP-granting entries for the target skill."""
     target_xp = level_to_xp(target_level, table)
     xp_gap = max(0, target_xp - current_xp)
@@ -174,6 +174,38 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes):
                 'level_requirements': level_reqs,
             })
 
+    # ── Cargo-processing recipes (e.g. ore chunk -> ore piece) ──
+    for item_id, recipe_list in game_data.get('cargo_by_item', {}).items():
+        item_name = _lookup_item_name(item_id, recipes, game_data)
+        for recipe in recipe_list:
+            exp_qty = _get_exp_qty(recipe, skill_id)
+            if exp_qty <= 0:
+                continue
+            actions_required = recipe.get('actions_required', 1) or 1
+            xp_per_craft = exp_qty * actions_required
+            if xp_per_craft <= 0:
+                continue
+            crafts_needed = math.ceil(xp_gap / xp_per_craft) if xp_gap > 0 else 0
+
+            ingredients = [{
+                'item_id': str(recipe.get('cargo_input_id', '')),
+                'item_name': recipe.get('cargo_input_name') or str(recipe.get('cargo_input_id', '')),
+                'quantity': crafts_needed * recipe.get('cargo_input_qty', 1),
+                'per_craft': recipe.get('cargo_input_qty', 1),
+            }]
+
+            level_reqs = _format_level_reqs(recipe.get('level_requirements', []))
+            options.append({
+                'type': 'Craft',
+                'item_id': str(item_id),
+                'item_name': recipe.get('output_item_name') or item_name,
+                'recipe_name': _format_recipe_name(recipe.get('recipe_name') or 'Craft', recipe.get('output_item_name') or item_name, recipe.get('cargo_input_name') or ''),
+                'xp_per_action': xp_per_craft,
+                'actions_needed': crafts_needed,
+                'ingredients': ingredients,
+                'level_requirements': level_reqs,
+            })
+
     # Sort by fewest actions needed (ascending), then xp_per_action descending
     options.sort(key=lambda o: (o['actions_needed'], -o['xp_per_action']))
     return {
@@ -185,7 +217,7 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes):
 
 def _get_exp_qty(recipe, skill_id):
     """Extract XP quantity for a given skill_id from a recipe's experiencePerProgress list."""
-    for entry in recipe.get('experiencePerProgress', []):
+    for entry in recipe.get('experiencePerProgress', []) + recipe.get('experience_per_progress', []):
         if entry.get('skill_id') == skill_id:
             return entry.get('quantity', 0)
     return 0
@@ -200,6 +232,25 @@ def _format_level_reqs(reqs):
         name = SKILL_NAMES.get(sid, str(sid)) if sid else '?'
         result.append({'skill': name, 'level': lv})
     return result
+
+
+def _lookup_item_name(item_id, recipes, game_data):
+    item_id = str(item_id)
+    if item_id in recipes:
+        return recipes[item_id].get('name', item_id)
+    for recipe_list in game_data.get('cargo_by_item', {}).values():
+        for recipe in recipe_list:
+            for consumed in recipe.get('consumed', []):
+                if str(consumed.get('item_id', '')) == item_id and consumed.get('item_name'):
+                    return consumed['item_name']
+    return item_id
+
+
+def _format_recipe_name(template, output_name, input_name):
+    try:
+        return template.format(output_name, input_name)
+    except Exception:
+        return template
 
 
 def _get_primary_output(recipe, recipes, fallback_item_id, fallback_item_name):
@@ -258,7 +309,8 @@ class handler(BaseHTTPRequestHandler):
                 target_level = min(target_level, max_level)
 
                 recipes = load_recipes_cache()
-                result = build_options_response(skill_id, current_xp, target_level, table, recipes)
+                game_data = load_game_data()
+                result = build_options_response(skill_id, current_xp, target_level, table, recipes, game_data)
                 result['skill_name'] = SKILL_NAMES[skill_id]
                 result['current_xp'] = current_xp
                 result['current_level'] = current_level

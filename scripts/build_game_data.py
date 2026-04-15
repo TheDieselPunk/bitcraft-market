@@ -232,6 +232,7 @@ def build_cargo_by_item(crafting_list, cargo_extraction, extraction_by_item,
                     'actions_required':   r.get('actions_required', 1),
                     'tool_requirements':  r.get('tool_requirements', []),
                     'level_requirements': r.get('level_requirements', []),
+                    'experience_per_progress': r.get('experience_per_progress', []),
                     'cargo_input_id':     cargo_id,
                     'cargo_input_qty':    cargo_input.get('quantity', 1),
                     'cargo_input_name':   cargo_name,
@@ -262,11 +263,13 @@ def build_cargo_by_item(crafting_list, cargo_extraction, extraction_by_item,
                         for actual_id, total_qty in item_outputs.items():
                             entry = dict(entry_base)
                             entry['output_quantity'] = total_qty
+                            entry['output_item_name'] = item_by_id.get(int(actual_id), {}).get('name', actual_id)
                             by_item.setdefault(actual_id, []).append(entry)
                         continue  # skip the wrapper key itself
                     # fallthrough: list not found, use wrapper key
                 entry = dict(entry_base)
                 entry['output_quantity'] = out_qty
+                entry['output_item_name'] = item_by_id.get(out_item_id, {}).get('name', str(out_item_id))
                 by_item.setdefault(str(out_item_id), []).append(entry)
 
     return by_item
