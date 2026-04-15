@@ -110,6 +110,18 @@
     .options-title { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
     .options-meta  { font-size: 12px; color: var(--fg-dim); }
     .options-meta span { color: var(--accent2); font-weight: 600; }
+    .options-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .filter-label { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+    .filter-chips { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+    .filter-chip {
+      background: var(--surface2); color: var(--fg-dim); border: 1px solid var(--border);
+      border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+      transition: background .15s, border-color .15s, color .15s;
+    }
+    .filter-chip:hover { color: var(--fg); border-color: var(--accent2); }
+    .filter-chip.active { background: rgba(137, 180, 250, 0.15); color: var(--accent2); border-color: var(--accent2); }
+    .filter-chip.clear-chip { color: var(--yellow); }
+    .filter-chip.clear-chip:hover { border-color: var(--yellow); color: var(--yellow); }
 
     .options-table-wrap { overflow-x: auto; }
     .options-table {
@@ -229,6 +241,7 @@
   let skillsData      = [];
   let currentOptionsData = null;
   let optionsSort = { key: 'actions_needed', dir: 'asc' };
+  let skillCategoryFilters = loadSkillCategoryFilters();
 
   // ── Player Search ──────────────────────────────────────────────────────────
 
@@ -337,13 +350,14 @@
   function renderOptions(data) {
     currentOptionsData = data;
     const col = document.getElementById('results-col');
-    const opts = sortOptions(filterOptionsByRequirements(data.options || []));
-    const skill = skillsData.find(s => s.skill_id === currentSkillId) || {};
+    const eligibleOpts = filterOptionsByRequirements(data.options || []);
+    const availableCategories = getAvailableCategories(eligibleOpts);
+    const opts = sortOptions(filterOptionsByCategory(eligibleOpts));
 
-    if (opts.length === 0) {
+    if (eligibleOpts.length === 0) {
       col.innerHTML = `<div class="results-empty">
         <div class="big-icon">🔍</div>
-        <div>No eligible recipes found that grant ${data.skill_name} XP.</div>
+        <div>${escHtml(`No eligible recipes found that grant ${data.skill_name} XP.`)}</div>
       </div>`;
       return;
     }
@@ -378,6 +392,13 @@
       </tr>`;
     }).join('');
 
+    const emptyState = opts.length === 0
+      ? `<div class="results-empty" style="padding:32px 24px;margin-top:4px;">
+          <div class="big-icon">ðŸ”</div>
+          <div>No eligible recipes match the selected categories.</div>
+        </div>`
+      : '';
+
     col.innerHTML = `
       <div class="options-card">
         <div class="options-header">
@@ -387,7 +408,8 @@
             ${opts.length} option${opts.length !== 1 ? 's' : ''}
           </div>
         </div>
-        <div class="options-table-wrap">
+        ${renderCategoryFilters(availableCategories)}
+        ${emptyState || `<div class="options-table-wrap">
           <table class="options-table">
             <thead>
               <tr>
@@ -400,7 +422,7 @@
             </thead>
             <tbody>${rows}</tbody>
           </table>
-        </div>
+        </div>`}
       </div>`;
   }
 
@@ -429,6 +451,84 @@
 
   function filterOptionsByRequirements(opts) {
     return opts.filter(o => o.level_requirements.every(r => getSkillLevel(r.skill) >= r.level));
+  }
+
+  function loadSkillCategoryFilters() {
+    try {
+      const raw = localStorage.getItem('skillPlannerCategoryFilters');
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function saveSkillCategoryFilters() {
+    localStorage.setItem('skillPlannerCategoryFilters', JSON.stringify(skillCategoryFilters));
+  }
+
+  function getSkillFilterKey() {
+    return String(currentSkillId || '');
+  }
+
+  function getActiveCategories() {
+    const key = getSkillFilterKey();
+    const categories = skillCategoryFilters[key];
+    return Array.isArray(categories) ? categories : [];
+  }
+
+  function setActiveCategories(categories) {
+    const key = getSkillFilterKey();
+    if (!key) return;
+    if (!categories || categories.length === 0) {
+      delete skillCategoryFilters[key];
+    } else {
+      skillCategoryFilters[key] = [...new Set(categories)].sort((a, b) => a.localeCompare(b));
+    }
+    saveSkillCategoryFilters();
+  }
+
+  function getAvailableCategories(opts) {
+    return [...new Set(
+      opts.map(o => (o.item_category || 'Uncategorized')).filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b));
+  }
+
+  function filterOptionsByCategory(opts) {
+    const active = getActiveCategories();
+    if (active.length === 0) return opts;
+    const activeSet = new Set(active);
+    return opts.filter(o => activeSet.has(o.item_category || 'Uncategorized'));
+  }
+
+  function renderCategoryFilters(categories) {
+    if (!categories.length) return '';
+    const active = new Set(getActiveCategories());
+    const chips = categories.map(category => {
+      const isActive = active.has(category);
+      return `<button type="button" class="filter-chip${isActive ? ' active' : ''}" onclick='toggleCategoryFilter(${JSON.stringify(category)})'>${escHtml(category)}</button>`;
+    }).join('');
+    const clearBtn = active.size > 0
+      ? `<button type="button" class="filter-chip clear-chip" onclick="clearCategoryFilters()">Clear</button>`
+      : '';
+    return `
+      <div class="options-filters">
+        <div class="filter-label">Categories</div>
+        <div class="filter-chips">${chips}${clearBtn}</div>
+      </div>`;
+  }
+
+  function toggleCategoryFilter(category) {
+    const active = new Set(getActiveCategories());
+    if (active.has(category)) active.delete(category);
+    else active.add(category);
+    setActiveCategories([...active]);
+    if (currentOptionsData) renderOptions(currentOptionsData);
+  }
+
+  function clearCategoryFilters() {
+    setActiveCategories([]);
+    if (currentOptionsData) renderOptions(currentOptionsData);
   }
 
   function getSkillLevel(skillName) {

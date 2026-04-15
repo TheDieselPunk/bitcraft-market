@@ -130,6 +130,7 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes, g
                 'type': 'Gather',
                 'item_id': item_id,
                 'item_name': item_name,
+                'item_category': _get_item_category(item_id, item_name, recipes),
                 'recipe_name': recipe.get('verbPhrase') or 'Extract',
                 'xp_per_action': xp_per_cast,
                 'actions_needed': casts_needed,
@@ -167,6 +168,7 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes, g
                 'type': 'Craft',
                 'item_id': output_item_id,
                 'item_name': output_item_name,
+                'item_category': _get_item_category(output_item_id, output_item_name, recipes),
                 'recipe_name': recipe.get('name') or 'Craft',
                 'xp_per_action': xp_per_craft,
                 'actions_needed': crafts_needed,
@@ -195,6 +197,7 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes, g
                 'type': 'Gather',
                 'item_id': str(cargo_input_id),
                 'item_name': cargo_name,
+                'item_category': _get_item_category(cargo_input_id, cargo_name, recipes),
                 'recipe_name': f'Gather {cargo_name}',
                 'xp_per_action': xp_per_cast,
                 'actions_needed': casts_needed,
@@ -228,6 +231,7 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes, g
                 'type': 'Craft',
                 'item_id': str(item_id),
                 'item_name': recipe.get('output_item_name') or item_name,
+                'item_category': _get_item_category(item_id, recipe.get('output_item_name') or item_name, recipes),
                 'recipe_name': _format_recipe_name(recipe.get('recipe_name') or 'Craft', recipe.get('output_item_name') or item_name, recipe.get('cargo_input_name') or ''),
                 'xp_per_action': xp_per_craft,
                 'actions_needed': crafts_needed,
@@ -282,6 +286,29 @@ def _lookup_cargo_name(cargo_id, game_data):
             if str(recipe.get('cargo_input_id', '')) == cargo_id and recipe.get('cargo_input_name'):
                 return recipe['cargo_input_name']
     return cargo_id
+
+
+def _get_item_category(item_id, item_name, recipes):
+    item = recipes.get(str(item_id), {})
+    tag = item.get('tag')
+    if tag:
+        return tag
+    inferred = _infer_category_from_name(item_name)
+    return inferred or 'Uncategorized'
+
+
+def _infer_category_from_name(name):
+    if not name:
+        return ''
+    patterns = [
+        'Ore Chunk', 'Ore Piece', 'Ore Concentrate', 'Tree Bark', 'Wood Log',
+        'Stone Chunk', 'Pebbles', 'Trunk', 'Parchment', 'Ink', 'Ingot',
+        'Nails', 'Cloth', 'Leather', 'Rope', 'Fish Oil',
+    ]
+    for pattern in patterns:
+        if name.endswith(pattern) or pattern in name:
+            return pattern
+    return ''
 
 
 def _get_required_tool_power(recipe):
