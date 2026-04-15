@@ -357,6 +357,8 @@
         ? `<div class="ing-list">${o.ingredients.map(i =>
             `<div class="ing-item"><span class="ing-qty">${fmtNum(i.quantity)}×</span> ${escHtml(i.item_name)} <span style="color:var(--fg-dim)">(${i.per_craft}/craft)</span></div>`
           ).join('')}</div>`
+        : (o.estimated_output != null && o.type === 'Gather')
+        ? `<div class="ing-list"><div class="ing-item">Est. output: <span class="ing-qty">${fmtFloat(o.estimated_output)}</span> ${escHtml(o.item_name)}</div></div>`
         : `<span class="ing-none">${o.type === 'Gather' ? '—' : 'no items'}</span>`;
 
       const lvlHtml = o.level_requirements.length > 0
@@ -407,6 +409,11 @@
   function fmtNum(n) {
     if (n == null) return '—';
     return Math.round(n).toLocaleString();
+  }
+
+  function fmtFloat(n) {
+    if (n == null) return '—';
+    return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
   }
 
   function fmtXp(n) {

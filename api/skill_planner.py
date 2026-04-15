@@ -199,6 +199,7 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes, g
                 'xp_per_action': xp_per_cast,
                 'actions_needed': casts_needed,
                 'ingredients': [],
+                'estimated_output': casts_needed * recipe.get('prob_per_hp', 0) * _get_required_tool_power(recipe),
                 'level_requirements': level_reqs,
             })
 
@@ -281,6 +282,13 @@ def _lookup_cargo_name(cargo_id, game_data):
             if str(recipe.get('cargo_input_id', '')) == cargo_id and recipe.get('cargo_input_name'):
                 return recipe['cargo_input_name']
     return cargo_id
+
+
+def _get_required_tool_power(recipe):
+    reqs = recipe.get('toolRequirements', []) + recipe.get('tool_requirements', [])
+    if reqs:
+        return reqs[0].get('power', 1) or 1
+    return 1
 
 
 def _format_recipe_name(template, output_name, input_name):
