@@ -239,6 +239,45 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes, g
                 'level_requirements': level_reqs,
             })
 
+    # ── Item-to-item crafting recipes (e.g. hunting harvests like Nubi Goat -> pelt/meat) ──
+    for item_id, recipe_list in game_data.get('item_to_item_crafting', {}).items():
+        item_name = _lookup_item_name(item_id, recipes, game_data)
+        for recipe in recipe_list:
+            exp_qty = _get_exp_qty(recipe, skill_id)
+            if exp_qty <= 0:
+                continue
+            actions_required = recipe.get('actions_required', 1) or 1
+            xp_per_craft = exp_qty * actions_required
+            if xp_per_craft <= 0:
+                continue
+            crafts_needed = math.ceil(xp_gap / xp_per_craft) if xp_gap > 0 else 0
+
+            consumed = recipe.get('consumed', [])
+            ingredients = [{
+                'item_id': str(ing.get('item_id', '')),
+                'item_name': ing.get('item_name') or str(ing.get('item_id', '')),
+                'quantity': crafts_needed * ing.get('quantity', 1),
+                'per_craft': ing.get('quantity', 1),
+            } for ing in consumed]
+
+            source_name = consumed[0].get('item_name') if consumed else ''
+            level_reqs = _format_level_reqs(recipe.get('level_requirements', []))
+            options.append({
+                'type': 'Craft',
+                'item_id': str(item_id),
+                'item_name': item_name,
+                'item_category': _get_item_category(item_id, item_name, recipes),
+                'recipe_name': _format_recipe_name(
+                    recipe.get('recipe_name') or 'Craft',
+                    item_name,
+                    source_name,
+                ),
+                'xp_per_action': xp_per_craft,
+                'actions_needed': crafts_needed,
+                'ingredients': ingredients,
+                'level_requirements': level_reqs,
+            })
+
     # Sort by fewest actions needed (ascending), then xp_per_action descending
     options.sort(key=lambda o: (o['actions_needed'], -o['xp_per_action']))
     return {

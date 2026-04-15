@@ -413,6 +413,7 @@ def build_item_to_item_crafting(crafting_list, item_by_id, item_list_by_id, carg
             'actions_required':   r.get('actions_required', 1),
             'tool_requirements':  r.get('tool_requirements', []),
             'level_requirements': r.get('level_requirements', []),
+            'experience_per_progress': r.get('experience_per_progress', []),
             'consumed':           consumed,
         }
 
