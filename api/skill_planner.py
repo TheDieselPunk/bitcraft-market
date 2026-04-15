@@ -137,8 +137,8 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes):
                 'level_requirements': level_reqs,
             })
 
-        # ── Crafting recipes ──
-        for recipe in item_data.get('crafting', []):
+        # ── Crafting / using recipes ──
+        for recipe in item_data.get('crafting', []) + item_data.get('using', []):
             exp_qty = _get_exp_qty(recipe, skill_id)
             if exp_qty <= 0:
                 continue
