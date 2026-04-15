@@ -21,9 +21,8 @@ SKILL_NAMES = {
     1: 'ANY',            2: 'Forestry',      3: 'Carpentry',   4: 'Masonry',
     5: 'Mining',         6: 'Smithing',      7: 'Scholar',     8: 'Leatherworking',
     9: 'Hunting',       10: 'Tailoring',    11: 'Farming',    12: 'Fishing',
-   13: 'Cooking',       14: 'Foraging',     15: 'Construction',
-   17: 'Taming',        18: 'Slayer',       19: 'Merchanting',
-   21: 'Sailing',       22: 'Hexite Gathering',
+    13: 'Cooking',       14: 'Foraging',     15: 'Construction',
+   17: 'Taming',        21: 'Sailing',
 }
 
 
