@@ -174,6 +174,34 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes, g
                 'level_requirements': level_reqs,
             })
 
+    # ── Wrapper-based cargo gathering (e.g. mine ore chunk from world nodes) ──
+    seen_cargo_gather = set()
+    for item_id, extraction_list in game_data.get('extraction_by_item', {}).items():
+        for recipe in extraction_list:
+            cargo_input_id = recipe.get('cargo_input_id')
+            if not cargo_input_id:
+                continue
+            xp_per_cast = _get_exp_qty(recipe, skill_id)
+            if xp_per_cast <= 0:
+                continue
+            cargo_name = _lookup_cargo_name(cargo_input_id, game_data)
+            level_reqs = _format_level_reqs(recipe.get('level_requirements', []))
+            dedupe_key = (cargo_input_id, tuple((r['skill'], r['level']) for r in level_reqs))
+            if dedupe_key in seen_cargo_gather:
+                continue
+            seen_cargo_gather.add(dedupe_key)
+            casts_needed = math.ceil(xp_gap / xp_per_cast) if xp_gap > 0 else 0
+            options.append({
+                'type': 'Gather',
+                'item_id': str(cargo_input_id),
+                'item_name': cargo_name,
+                'recipe_name': f'Gather {cargo_name}',
+                'xp_per_action': xp_per_cast,
+                'actions_needed': casts_needed,
+                'ingredients': [],
+                'level_requirements': level_reqs,
+            })
+
     # ── Cargo-processing recipes (e.g. ore chunk -> ore piece) ──
     for item_id, recipe_list in game_data.get('cargo_by_item', {}).items():
         item_name = _lookup_item_name(item_id, recipes, game_data)
@@ -244,6 +272,15 @@ def _lookup_item_name(item_id, recipes, game_data):
                 if str(consumed.get('item_id', '')) == item_id and consumed.get('item_name'):
                     return consumed['item_name']
     return item_id
+
+
+def _lookup_cargo_name(cargo_id, game_data):
+    cargo_id = str(cargo_id)
+    for recipe_list in game_data.get('cargo_by_item', {}).values():
+        for recipe in recipe_list:
+            if str(recipe.get('cargo_input_id', '')) == cargo_id and recipe.get('cargo_input_name'):
+                return recipe['cargo_input_name']
+    return cargo_id
 
 
 def _format_recipe_name(template, output_name, input_name):

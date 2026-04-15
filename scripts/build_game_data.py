@@ -142,6 +142,7 @@ def build_extraction_by_item(extraction_list, item_list_by_id, item_by_id):
                 'time_per_cast': time_req,
                 'tool_requirements': tools,
                 'level_requirements': levels,
+                'experience_per_progress': r.get('experience_per_progress', []),
                 'consumed': consumed,
             }
 
