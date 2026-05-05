@@ -2,9 +2,9 @@
 """
 build_recipes.py — Recipe cache builder for GitHub Actions.
 
-Fetches all items that currently have market orders and caches their
-extraction, crafting, recipesUsingItem, and itemListPossibilities data
-into data/recipes.json.
+Fetches the live BitJita market item list, then reads static BitCraftToolBox
+desc tables for item details, extraction, crafting, recipesUsingItem, and
+itemListPossibilities data into data/recipes.json.
 
 Also fetches:
   - Intermediate items (e.g. "Briny Argus Products") produced by
@@ -12,8 +12,8 @@ Also fetches:
   - Ingredient items (e.g. "Emarium Ore Chunk") used in crafting recipes
     but not sold on the market — needed so can_craft() works correctly.
 
-Uses a thread-safe token bucket rate limiter + ThreadPoolExecutor to run
-as many concurrent requests as possible without exceeding the 250 req/min cap.
+Uses a thread-safe token bucket rate limiter for the remaining live market
+requests without exceeding the 250 req/min cap.
 
 Run from the web/ directory:
     python scripts/build_recipes.py
@@ -25,13 +25,15 @@ import threading
 import urllib.request
 import urllib.parse
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 API_BASE   = 'https://bitjita.com'
 HEADERS    = {'User-Agent': 'BitJita (Billard)', 'Accept': 'application/json'}
+STATIC_BASE = (
+    'https://raw.githubusercontent.com/BitCraftToolBox/'
+    'BitCraft_GameData/cereal/cs/static'
+)
 OUT_FILE        = Path(__file__).parent.parent / 'data' / 'recipes.json'
 TOOL_PRICES_FILE = Path(__file__).parent.parent / 'data' / 'tool_prices.json'
-MAX_WORKERS = 10          # concurrent HTTP connections
 RATE_LIMIT  = 240         # req/min — comfortably under the 250 cap
 BURST       = 15          # token bucket burst size
 
@@ -102,41 +104,301 @@ def api_get(path, params=None):
         return json.loads(r.read())
 
 
-# ── Per-item fetch functions ────────────────────────────────────────────────
+# ── Static table helpers ────────────────────────────────────────────────────
 
-def fetch_market_item(item_id: str) -> dict:
-    d = api_get(f'/api/items/{item_id}')
+def fetch_static_json(filename):
+    url = f'{STATIC_BASE}/{filename}'
+    print(f'  Fetching {filename} ...')
+    req = urllib.request.Request(url, headers={'Accept': 'application/json'})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read())
+
+
+def to_list(data):
+    return data if isinstance(data, list) else list(data.values())
+
+
+def build_lookup(rows, key='id'):
+    return {entry[key]: entry for entry in rows}
+
+
+def item_type_name(item_type):
+    if isinstance(item_type, str):
+        return item_type.lower()
+    return 'cargo' if item_type == 1 else 'item'
+
+
+def normalize_item_stack(stack):
     return {
-        'name':                  d['item']['name'],
-        'tier':                  d['item']['tier'],
-        'tag':                   d['item'].get('tag', ''),
-        'extraction':            d.get('extractionRecipes', []),
-        'crafting':              d.get('craftingRecipes', []),
-        'using':                 d.get('recipesUsingItem', []),
-        'itemListPossibilities': d.get('itemListPossibilities', []),
+        'item_id':            stack.get('item_id'),
+        'quantity':           stack.get('quantity', 1),
+        'item_type':          item_type_name(stack.get('item_type', 'Item')),
+        'durability':         stack.get('durability', 0),
+        'discovery_score':    stack.get('discovery_score', 0),
+        'consumption_chance': stack.get('consumption_chance', 1),
     }
 
 
-def fetch_intermediate_item(item_id: str) -> dict:
-    d = api_get(f'/api/items/{item_id}')
+def normalize_level_requirements(reqs):
+    return [
+        {
+            'level':    req.get('level', 1),
+            'skill_id': req.get('skill_id') or (req.get('skill') or {}).get('id'),
+        }
+        for req in reqs
+    ]
+
+
+def normalize_tool_requirements(reqs):
+    return [
+        {
+            'level':     req.get('level', 1),
+            'power':     req.get('power', 1),
+            'tool_type': req.get('tool_type'),
+        }
+        for req in reqs
+    ]
+
+
+def normalize_experience(entries):
+    return [
+        {'quantity': entry.get('quantity', 0), 'skill_id': entry.get('skill_id')}
+        for entry in entries
+    ]
+
+
+def item_summary(item_id, item_by_id):
+    item = item_by_id.get(int(item_id), {})
     return {
-        'name':                  d['item']['name'],
-        'tier':                  d['item']['tier'],
-        'tag':                   d['item'].get('tag', ''),
+        'id':            str(item_id),
+        'name':          item.get('name', str(item_id)),
+        'iconAssetName': item.get('icon_asset_name', ''),
+        'tier':          item.get('tier'),
+        'rarity':        item.get('rarity'),
+    }
+
+
+def stack_summaries(stacks, item_by_id, cargo_by_id):
+    result = []
+    for stack in stacks:
+        item_id = stack.get('item_id')
+        item_type = item_type_name(stack.get('item_type', 'Item'))
+        if item_type == 'cargo':
+            source = cargo_by_id.get(item_id, {})
+            item_type_int = 1
+        else:
+            source = item_by_id.get(item_id, {})
+            item_type_int = 0
+        result.append({
+            'id':            item_id,
+            'quantity':      stack.get('quantity', 1),
+            'itemType':      item_type_int,
+            'name':          source.get('name', str(item_id)),
+            'iconAssetName': source.get('icon_asset_name', ''),
+        })
+    return result
+
+
+def normalize_crafting_recipe(recipe, item_by_id, cargo_by_id):
+    consumed = [normalize_item_stack(s) for s in recipe.get('consumed_item_stacks', [])]
+    crafted = [normalize_item_stack(s) for s in recipe.get('crafted_item_stacks', [])]
+    direct_output = next((s for s in crafted if s.get('item_type') == 'item'), None)
+    return {
+        'id':                       recipe.get('id'),
+        'name':                     recipe.get('name', 'Craft'),
+        'timeRequirement':          recipe.get('time_requirement', 1.6),
+        'staminaRequirement':       recipe.get('stamina_requirement', 0),
+        'toolDurabilityLost':       recipe.get('tool_durability_lost', 0),
+        'buildingRequirementType':  recipe.get('building_requirement_type', 0),
+        'buildingRequirementTier':  recipe.get('building_requirement_tier', 0),
+        'levelRequirements':        normalize_level_requirements(recipe.get('level_requirements', [])),
+        'toolRequirements':         normalize_tool_requirements(recipe.get('tool_requirements', [])),
+        'consumedItemStacks':       consumed,
+        'discoveryTriggers':        recipe.get('discovery_triggers', []),
+        'requiredClaimTechId':      recipe.get('required_claim_tech_id', 0),
+        'fullDiscoveryScore':       str(recipe.get('full_discovery_score', '1')),
+        'experiencePerProgress':    normalize_experience(recipe.get('experience_per_progress', [])),
+        'craftedItemStacks':        crafted,
+        'actionsRequired':          recipe.get('actions_required', 1),
+        'toolMeshIndex':            recipe.get('tool_mesh_index', 0),
+        'recipePerformanceId':      recipe.get('recipe_performance_id', 0),
+        'requiredKnowledges':       recipe.get('required_knowledges', []),
+        'blockingKnowledges':       recipe.get('blocking_knowledges', []),
+        'hideWithoutRequiredKnowledge': recipe.get('hide_without_required_knowledge', False),
+        'hideWithBlockingKnowledges':   recipe.get('hide_with_blocking_knowledges', False),
+        'allowUseHands':            recipe.get('allow_use_hands', False),
+        'isPassive':                recipe.get('is_passive', False),
+        'consumedItems':            stack_summaries(recipe.get('consumed_item_stacks', []), item_by_id, cargo_by_id),
+        'craftedItems':             stack_summaries(recipe.get('crafted_item_stacks', []), item_by_id, cargo_by_id),
+        'outputQuantity':           direct_output.get('quantity', 1) if direct_output else 1,
+        'targetId':                 direct_output.get('item_id') if direct_output else 0,
+        'buildingType':             recipe.get('building_requirement_type', 0),
+        'buildingTier':             recipe.get('building_requirement_tier', 0),
+    }
+
+
+def normalize_extraction_recipe(recipe, item_by_id, cargo_by_id):
+    extracted = [
+        {
+            'item_stack': normalize_item_stack(entry.get('item_stack', {})),
+            'probability': entry.get('probability', 0),
+        }
+        for entry in recipe.get('extracted_item_stacks', [])
+    ]
+    consumed = [normalize_item_stack(s) for s in recipe.get('consumed_item_stacks', [])]
+    direct_output = next(
+        (
+            entry['item_stack']
+            for entry in extracted
+            if entry.get('item_stack', {}).get('item_type') == 'item'
+        ),
+        None,
+    )
+    return {
+        'id':                    recipe.get('id'),
+        'resourceId':            recipe.get('resource_id', 0),
+        'cargoId':               recipe.get('cargo_id', 0),
+        'discoveryTriggers':     recipe.get('discovery_triggers', []),
+        'requiredKnowledges':    recipe.get('required_knowledges', []),
+        'timeRequirement':       recipe.get('time_requirement', 1.6),
+        'staminaRequirement':    recipe.get('stamina_requirement', 0),
+        'toolDurabilityLost':    recipe.get('tool_durability_lost', 0),
+        'extractedItemStacks':   extracted,
+        'consumedItemStacks':    consumed,
+        'range':                 recipe.get('range', 0),
+        'toolRequirements':      normalize_tool_requirements(recipe.get('tool_requirements', [])),
+        'allowUseHands':         recipe.get('allow_use_hands', True),
+        'levelRequirements':     normalize_level_requirements(recipe.get('level_requirements', [])),
+        'experiencePerProgress': normalize_experience(recipe.get('experience_per_progress', [])),
+        'verbPhrase':            recipe.get('verb_phrase', 'Extract'),
+        'toolMeshIndex':         recipe.get('tool_mesh_index', 0),
+        'recipePerformanceId':   recipe.get('recipe_performance_id', 0),
+        'consumedItems':         stack_summaries(recipe.get('consumed_item_stacks', []), item_by_id, cargo_by_id),
+        'extractedItems':        stack_summaries(
+            [entry.get('item_stack', {}) for entry in recipe.get('extracted_item_stacks', [])],
+            item_by_id,
+            cargo_by_id,
+        ),
+        'outputQuantity':        direct_output.get('quantity', 1) if direct_output else 1,
+        'targetId':              direct_output.get('item_id') if direct_output else 0,
+        'averageOutputs':        [],
+    }
+
+
+def index_item_list_possibilities(item_list_rows, item_by_id):
+    indexed = {}
+    for item_list in item_list_rows:
+        entries = []
+        for possibility in item_list.get('possibilities', []):
+            chance = possibility.get('probability', 1)
+            for stack in possibility.get('items', []):
+                target_id = str(stack.get('item_id', ''))
+                if not target_id:
+                    continue
+                entries.append({
+                    'targetId':   target_id,
+                    'targetItem': item_summary(target_id, item_by_id),
+                    'quantity':   stack.get('quantity', 1),
+                    'chance':     chance,
+                    'isCargo':    item_type_name(stack.get('item_type', 'Item')) == 'cargo',
+                })
+        indexed[item_list.get('id')] = entries
+    return indexed
+
+
+def resolve_item_outputs(stack, item_by_id, item_list_possibilities):
+    if item_type_name(stack.get('item_type', 'Item')) != 'item':
+        return []
+    item_id = stack.get('item_id')
+    item = item_by_id.get(item_id, {})
+    list_id = item.get('item_list_id', 0)
+    if list_id:
+        return [
+            int(entry['targetId'])
+            for entry in item_list_possibilities.get(list_id, [])
+            if not entry.get('isCargo') and str(entry.get('targetId', '')).isdigit()
+        ]
+    return [item_id] if item_id else []
+
+
+def build_static_indexes():
+    print('\nFetching static BitCraftToolBox desc tables ...')
+    item_rows = to_list(fetch_static_json('item_desc.json'))
+    cargo_rows = to_list(fetch_static_json('cargo_desc.json'))
+    crafting_rows = to_list(fetch_static_json('crafting_recipe_desc.json'))
+    extraction_rows = to_list(fetch_static_json('extraction_recipe_desc.json'))
+    item_list_rows = to_list(fetch_static_json('item_list_desc.json'))
+
+    item_by_id = build_lookup(item_rows)
+    cargo_by_id = build_lookup(cargo_rows)
+    item_list_possibilities = index_item_list_possibilities(item_list_rows, item_by_id)
+
+    crafting_by_output = {}
+    using_by_input = {}
+    for recipe in crafting_rows:
+        normalized = normalize_crafting_recipe(recipe, item_by_id, cargo_by_id)
+        for stack in recipe.get('crafted_item_stacks', []):
+            for output_id in resolve_item_outputs(stack, item_by_id, item_list_possibilities):
+                crafting_by_output.setdefault(str(output_id), []).append(normalized)
+        for stack in recipe.get('consumed_item_stacks', []):
+            if item_type_name(stack.get('item_type', 'Item')) == 'item' and stack.get('item_id'):
+                using_by_input.setdefault(str(stack['item_id']), []).append(normalized)
+
+    extraction_by_output = {}
+    for recipe in extraction_rows:
+        normalized = normalize_extraction_recipe(recipe, item_by_id, cargo_by_id)
+        for entry in recipe.get('extracted_item_stacks', []):
+            for output_id in resolve_item_outputs(
+                entry.get('item_stack', {}), item_by_id, item_list_possibilities
+            ):
+                extraction_by_output.setdefault(str(output_id), []).append(normalized)
+
+    return {
+        'items': item_by_id,
+        'item_list_possibilities': item_list_possibilities,
+        'crafting_by_output': crafting_by_output,
+        'using_by_input': using_by_input,
+        'extraction_by_output': extraction_by_output,
+    }
+
+
+# ── Per-item builders from static indexes ───────────────────────────────────
+
+def build_market_item(item_id: str, static_indexes: dict) -> dict:
+    item = static_indexes['items'].get(int(item_id), {})
+    return {
+        'name':                  item.get('name', item_id),
+        'tier':                  item.get('tier'),
+        'tag':                   item.get('tag', ''),
+        'extraction':            static_indexes['extraction_by_output'].get(item_id, []),
+        'crafting':              static_indexes['crafting_by_output'].get(item_id, []),
+        'using':                 static_indexes['using_by_input'].get(item_id, []),
+        'itemListPossibilities': static_indexes['item_list_possibilities'].get(item.get('item_list_id', 0), []),
+    }
+
+
+def build_intermediate_item(item_id: str, static_indexes: dict) -> dict:
+    item = static_indexes['items'].get(int(item_id), {})
+    return {
+        'name':                  item.get('name', item_id),
+        'tier':                  item.get('tier'),
+        'tag':                   item.get('tag', ''),
         'intermediate':          True,
-        'crafting':              d.get('craftingRecipes', []),
-        'itemListPossibilities': d.get('itemListPossibilities', []),
+        'crafting':              static_indexes['crafting_by_output'].get(item_id, []),
+        'itemListPossibilities': static_indexes['item_list_possibilities'].get(item.get('item_list_id', 0), []),
     }
 
 
-def fetch_ingredient_item(item_id: str) -> dict:
-    d = api_get(f'/api/items/{item_id}')
+def build_ingredient_item(item_id: str, static_indexes: dict) -> dict:
+    item = static_indexes['items'].get(int(item_id), {})
     return {
-        'name':       d['item']['name'],
-        'tier':       d['item']['tier'],
-        'tag':        d['item'].get('tag', ''),
+        'name':       item.get('name', item_id),
+        'tier':       item.get('tier'),
+        'tag':        item.get('tag', ''),
         'ingredient': True,
-        'extraction': d.get('extractionRecipes', []),
+        'extraction': static_indexes['extraction_by_output'].get(item_id, []),
+        'crafting':   static_indexes['crafting_by_output'].get(item_id, []),
+        'using':      static_indexes['using_by_input'].get(item_id, []),
     }
 
 
@@ -147,6 +409,7 @@ def fetch_batch(ids: list, fetch_fn, label: str) -> dict:
     Fetch a list of item IDs concurrently using ThreadPoolExecutor.
     Returns {item_id: data_dict}.
     """
+    raise RuntimeError('fetch_batch is unused; recipes are built from static tables')
     if not ids:
         return {}
 
@@ -173,8 +436,34 @@ def fetch_batch(ids: list, fetch_fn, label: str) -> dict:
 
 # ── Main ────────────────────────────────────────────────────────────────────
 
+def median(values):
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def fetch_sell_order_prices(item_id):
+    data = api_get(f'/api/market/item/{item_id}')
+    listing_list = (
+        data if isinstance(data, list)
+        else data.get('sellOrders', data.get('orders', []))
+    )
+    prices = []
+    for listing in listing_list:
+        price = listing.get('priceThreshold') or listing.get('price')
+        if price is None or float(price) <= 0:
+            continue
+        prices.append(float(price))
+    return prices
+
+
 def main():
     OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    static_indexes = build_static_indexes()
 
     # Load existing cache so we only re-fetch stale / new items
     existing: dict = {}
@@ -191,29 +480,16 @@ def main():
     items = data.get('data', {}).get('items', [])
     print(f'  {len(items)} items with active buy orders.')
 
-    # Items are stale if they're missing any required field
-    required  = {'extraction', 'crafting', 'using', 'itemListPossibilities'}
-    to_fetch  = [
-        str(item['id']) for item in items
-        if str(item['id']) not in existing
-        or not required.issubset(existing[str(item['id'])])
-    ]
-    cached_ok = len(items) - len(to_fetch)
-    print(f'  {cached_ok} already cached, {len(to_fetch)} need fetching.')
+    market_ids = [str(item['id']) for item in items]
+    print(f'  Rebuilding {len(market_ids)} market entries from static tables.')
 
-    updated = dict(existing)
-
-    # ── Pass 2: fetch stale/new market items concurrently ───────────────────
-    if to_fetch:
-        print(f'\nPass 2 — market items ({len(to_fetch)} items, '
-              f'up to {MAX_WORKERS} concurrent)…')
-        t0 = time.monotonic()
-        results = fetch_batch(to_fetch, fetch_market_item, 'market')
-        updated.update(results)
-        OUT_FILE.write_text(json.dumps(updated))
-        elapsed = time.monotonic() - t0
-        print(f'  Done in {elapsed:.1f}s '
-              f'({len(to_fetch)/elapsed*60:.0f} req/min effective).')
+    t0 = time.monotonic()
+    updated = {
+        iid: build_market_item(iid, static_indexes)
+        for iid in market_ids
+    }
+    OUT_FILE.write_text(json.dumps(updated))
+    print(f'  Done in {time.monotonic()-t0:.1f}s.')
 
     # ── Pass 3: intermediate items (Products / loot boxes) ──────────────────
     intermediate_ids = {
@@ -231,9 +507,10 @@ def main():
     if intermediate_ids:
         print(f'\nPass 3 — intermediate items ({len(intermediate_ids)})…')
         t0 = time.monotonic()
-        results = fetch_batch(list(intermediate_ids),
-                              fetch_intermediate_item, 'intermediate')
-        updated.update(results)
+        updated.update({
+            iid: build_intermediate_item(iid, static_indexes)
+            for iid in intermediate_ids
+        })
         OUT_FILE.write_text(json.dumps(updated))
         print(f'  Done in {time.monotonic()-t0:.1f}s.')
 
@@ -263,9 +540,11 @@ def main():
     if ingredient_ids:
         print(f'\nPass 4 — ingredient items ({len(ingredient_ids)})…')
         t0 = time.monotonic()
-        results = fetch_batch(list(ingredient_ids),
-                              fetch_ingredient_item, 'ingredient')
-        updated.update(results)
+        updated.update({
+            iid: build_ingredient_item(iid, static_indexes)
+            for iid in ingredient_ids
+        })
+        print(f'  Done in {time.monotonic()-t0:.1f}s.')
 
     # ── Pass 5: ingredients of extraction-consumed items (e.g. bait crafting) ─
     # One more pass to pull in items needed to craft bait / other extraction inputs.
@@ -283,9 +562,11 @@ def main():
     if bait_ingredient_ids:
         print(f'\nPass 5 — bait/extraction ingredient items ({len(bait_ingredient_ids)})…')
         t0 = time.monotonic()
-        results = fetch_batch(list(bait_ingredient_ids),
-                              fetch_ingredient_item, 'bait-ingredient')
-        updated.update(results)
+        updated.update({
+            iid: build_ingredient_item(iid, static_indexes)
+            for iid in bait_ingredient_ids
+        })
+        print(f'  Done in {time.monotonic()-t0:.1f}s.')
 
     # ── Summary + metadata ───────────────────────────────────────────────────
     n_market = sum(1 for v in updated.values()
@@ -317,16 +598,15 @@ def main():
     errors = 0
     for iid in TOOL_INGREDIENT_IDS:
         try:
-            _bucket.acquire()
-            d = api_get(f'/api/items/{iid}')
-            stats = d.get('marketStats') or {}
+            prices = fetch_sell_order_prices(iid)
+            item = static_indexes['items'].get(int(iid), {})
             tool_prices[iid] = {
-                'name':            d['item']['name'],
-                'medianSellPrice': stats.get('medianSellPrice'),
-                'lowestSellPrice': stats.get('lowestSellPrice'),
-                'medianBuyPrice':  stats.get('medianBuyPrice'),
-                'totalSellOrders': stats.get('totalSellOrders'),
-                'totalBuyOrders':  stats.get('totalBuyOrders'),
+                'name':            item.get('name', iid),
+                'medianSellPrice': median(prices),
+                'lowestSellPrice': min(prices) if prices else None,
+                'medianBuyPrice':  None,
+                'totalSellOrders': len(prices),
+                'totalBuyOrders':  None,
             }
         except Exception as e:
             errors += 1
