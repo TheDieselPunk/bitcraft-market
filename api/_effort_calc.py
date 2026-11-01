@@ -7,6 +7,7 @@ accumulates stamina, time, and ingredient costs split by profession.
 Key mechanics (confirmed empirically):
   - Extraction probability is per health-point of the resource node, not per cast.
     prob_per_cast = prob_per_hp * tool_power
+    (a cast can't remove more HP than the node has, so tool_power is capped at max HP)
   - stamina_per_item = stamina_per_cast / (prob_per_hp * tool_power)
   - time_per_item    = time_per_cast    / (prob_per_hp * tool_power)
   - bait_per_item    = consumption_chance / (prob_per_hp * tool_power)
@@ -160,6 +161,12 @@ def _get_tool_power(recipe, tools):
         if tt is not None and tt in tools:
             return max(tools[tt]['power'], 1)
     return 1
+
+
+def _hp_per_cast(entry, tool_power, game_data):
+    """HP one cast removes: the tool's power, but never more than the node has."""
+    hp = game_data.get('resource_max_health', {}).get(str(entry.get('resource_id', '')))
+    return min(tool_power, hp) if hp else tool_power
 
 
 def _skill_name(recipe, skill_names):
@@ -371,8 +378,9 @@ def _resolve_extraction_entry(item_id, quantity, entry, tools, acc, visited,
         acc.add_ingredient(item_id, quantity)
         return
 
-    stamina_per_item = entry['stamina_per_cast'] / (prob * tp)
-    time_per_item    = entry['time_per_cast']    / (prob * tp)
+    per_cast = prob * _hp_per_cast(entry, tp, game_data)
+    stamina_per_item = entry['stamina_per_cast'] / per_cast
+    time_per_item    = entry['time_per_cast']    / per_cast
     skill = _skill_name(entry, skill_names)
     item_name = (all_recipes.get(item_id) or {}).get('name') or item_id
 
@@ -390,7 +398,7 @@ def _resolve_extraction_entry(item_id, quantity, entry, tools, acc, visited,
 
     # Recurse on consumed items (bait etc.)
     for consumed in entry.get('consumed', []):
-        bait_per_item = consumed['consumption_chance'] / (prob * tp)
+        bait_per_item = consumed['consumption_chance'] / per_cast
         resolve_effort(
             str(consumed['item_id']),
             bait_per_item * quantity,
@@ -565,9 +573,9 @@ def _resolve_cargo_gathering(cargo_id, quantity, game_data, tools, acc, skill_na
         return
 
     tp = _get_tool_power(best, tools)
-    prob = best['prob_per_hp']
-    stamina_per_cargo = best['stamina_per_cast'] / (prob * tp)
-    time_per_cargo    = best['time_per_cast']    / (prob * tp)
+    per_cast = best['prob_per_hp'] * _hp_per_cast(best, tp, game_data)
+    stamina_per_cargo = best['stamina_per_cast'] / per_cast
+    time_per_cargo    = best['time_per_cast']    / per_cast
     skill = _skill_name(best, skill_names)
 
     acc.add_gather(skill, stamina_per_cargo * quantity, time_per_cargo * quantity)

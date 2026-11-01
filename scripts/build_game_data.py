@@ -465,6 +465,15 @@ FISHING_SKILL_ID = 12
 # Resource tags still in the static data but no longer reachable in game.
 REMOVED_RESOURCE_TAGS = {'Paranensis'}
 
+# Nodes nobody can gather on a loop: dungeon nodes, and one-shot 1-HP
+# "Uncharted" finds (an Old Anvil yields 60 Salvaged Pirate's Weapons once).
+# Counted as sources, they made routes like dungeon-mined Emarium look best.
+UNFARMABLE_RESOURCE_TAGS = {
+    'Dungeon Resource', 'Profession Dungeon Resource',
+    'Uncharted Resource', 'Uncharted Scholar', 'Uncharted Tailoring Resource',
+}
+SKIPPED_RESOURCE_TAGS = REMOVED_RESOURCE_TAGS | UNFARMABLE_RESOURCE_TAGS
+
 
 def build_node_activation(extraction_list, resource_list, item_by_id):
     """
@@ -557,9 +566,9 @@ def main():
     resource_list = to_list(fetch_json('resource_desc.json'))
     print(f'  {len(resource_list)} resource nodes.')
 
-    removed = {r['id'] for r in resource_list if r.get('tag') in REMOVED_RESOURCE_TAGS}
+    removed = {r['id'] for r in resource_list if r.get('tag') in SKIPPED_RESOURCE_TAGS}
     extraction_list = [r for r in extraction_list if r.get('resource_id') not in removed]
-    print(f'  Dropped {len(removed)} removed nodes ({", ".join(sorted(REMOVED_RESOURCE_TAGS))}).')
+    print(f'  Dropped {len(removed)} removed or unfarmable nodes ({", ".join(sorted(SKIPPED_RESOURCE_TAGS))}).')
 
     print('Fetching crafting_recipe_desc.json ...')
     crafting_list = to_list(fetch_json('crafting_recipe_desc.json'))

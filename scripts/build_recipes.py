@@ -29,6 +29,8 @@ import urllib.parse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from build_game_data import SKIPPED_RESOURCE_TAGS
+
 API_BASE    = 'https://bitjita.com'
 HEADERS     = {'User-Agent': 'BitJita (Billard)', 'Accept': 'application/json'}
 MAX_WORKERS = 10          # concurrent connections for tool-price fetches
@@ -332,6 +334,11 @@ def build_static_indexes():
     crafting_rows = to_list(fetch_static_json('crafting_recipe_desc.json'))
     extraction_rows = to_list(fetch_static_json('extraction_recipe_desc.json'))
     item_list_rows = to_list(fetch_static_json('item_list_desc.json'))
+    resource_rows = to_list(fetch_static_json('resource_desc.json'))
+
+    # Same node filter as game_data.json: removed and unfarmable nodes aren't sources
+    skipped = {r['id'] for r in resource_rows if r.get('tag') in SKIPPED_RESOURCE_TAGS}
+    extraction_rows = [r for r in extraction_rows if r.get('resource_id') not in skipped]
 
     item_by_id = build_lookup(item_rows)
     cargo_by_id = build_lookup(cargo_rows)

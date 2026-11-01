@@ -72,6 +72,12 @@ def _tool_power(tool_reqs, tool_powers):
     return tool_powers.get(tool_type, 1) if tool_type is not None else 1
 
 
+def _yield_per_cast(entry, power, game_data):
+    """Items one cast yields: each cast removes `power` HP, but never more than the node has."""
+    hp = game_data.get('resource_max_health', {}).get(str(entry.get('resource_id')))
+    return entry['prob_per_hp'] * (min(power, hp) if hp else power)
+
+
 def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
                       tool_powers, gather_speed, craft_speed, game_data, recipes):
     """
@@ -106,7 +112,7 @@ def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
 
         for fe in ebi.get(bait_fish_id, []):
             power         = _tool_power(fe.get('tool_requirements', []), tool_powers)
-            prob          = fe['prob_per_hp'] * power
+            prob          = _yield_per_cast(fe, power, game_data)
             if prob <= 0:
                 continue
             fish_casts    = craft_runs / prob
@@ -232,7 +238,7 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
         # Highest-yield source (e.g. Baited Spot over Baited School)
         fe = max(direct, key=lambda e: e['prob_per_hp'])
         power = _tool_power(fe.get('tool_requirements', []), tool_powers)
-        prob  = fe['prob_per_hp'] * power
+        prob  = _yield_per_cast(fe, power, game_data)
         if prob > 0:
             casts   = quantity / prob
             stamina = casts * fe['stamina_per_cast']
@@ -274,7 +280,7 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
 
             for fe in ebi.get(cargo_id, []) + cex.get(cargo_id, []):
                 power = _tool_power(fe.get('tool_requirements', []), tool_powers)
-                prob  = fe['prob_per_hp'] * power
+                prob  = _yield_per_cast(fe, power, game_data)
                 if prob <= 0:
                     continue
                 casts       = cargo_needed / prob
@@ -451,7 +457,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
         tool_type = tool_reqs[0]['tool_type'] if tool_reqs else None
         power = tool_powers.get(tool_type, 1) if tool_type is not None else 1
 
-        prob = e['prob_per_hp'] * power
+        prob = _yield_per_cast(e, power, game_data)
         if prob <= 0:
             continue
 
@@ -517,7 +523,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
             f_tool_type = f_tool_reqs[0]['tool_type'] if f_tool_reqs else None
             f_power = tool_powers.get(f_tool_type, 1) if f_tool_type is not None else 1
 
-            f_prob = fe['prob_per_hp'] * f_power
+            f_prob = _yield_per_cast(fe, f_power, game_data)
             if f_prob <= 0:
                 continue
 
@@ -599,7 +605,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
             f_tool_type = f_tool_reqs[0]['tool_type'] if f_tool_reqs else None
             f_power = tool_powers.get(f_tool_type, 1) if f_tool_type is not None else 1
 
-            f_prob = fe['prob_per_hp'] * f_power
+            f_prob = _yield_per_cast(fe, f_power, game_data)
             if f_prob <= 0:
                 continue
 
