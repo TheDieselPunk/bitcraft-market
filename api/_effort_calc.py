@@ -234,6 +234,78 @@ def _pick_best_crafting(recipe_list, tools, all_obtainable, item_id=None):
     return None
 
 
+def _expected_yield(recipe, item_id, all_recipes, game_data):
+    """
+    Expected units of item_id per craft of recipe, looking inside loot-box
+    outputs (Husk into Peerless Embergrain Products → ~1.6 seeds). A box that
+    isn't in recipes.json falls back to game_data's item_to_item_crafting,
+    which resolves the same item lists at build time.
+    """
+    total = 0.0
+    for out in recipe.get('craftedItemStacks', []):
+        oid = str(out.get('item_id', ''))
+        if oid == item_id:
+            total += out.get('quantity', 1)
+            continue
+        total += out.get('quantity', 1) * sum(
+            p.get('chance', 1.0) * p.get('quantity', 1)
+            for p in (all_recipes.get(oid) or {}).get('itemListPossibilities', [])
+            if str(p.get('targetId', '')) == item_id
+        )
+    if total:
+        return total
+
+    inputs = sorted(
+        str(i['item_id']) for i in recipe.get('consumedItemStacks', [])
+        if i.get('item_type') == 'item'
+    )
+    for entry in game_data.get('item_to_item_crafting', {}).get(item_id, []):
+        if entry.get('recipe_name') == recipe.get('name') and \
+           sorted(str(c['item_id']) for c in entry.get('consumed', [])) == inputs:
+            return entry.get('output_quantity', 0.0)
+    return 0.0
+
+
+def _replant_cycle(crop_id, all_recipes, game_data, process=None):
+    """
+    Find a recipe that grows crop_id from a seed the crop gives back when it is
+    processed: Grow Peerless Embergrain Plant sows 1 Peerless Embergrain Seeds
+    and husking the plant returns ~1.6. That seed is renewable, so the crop is
+    costed by one grow-and-process cycle instead of the tier-upgrade Grow
+    recipe (5 lower-tier plants each, 5^n down to tier 1).
+
+    Only a cycle that returns more seed than it sows counts, so loops that
+    break even or lose (pack/unpack, Split/Refine leather, Scrap/Recraft)
+    stay ordinary circular dependencies.
+
+    process limits the check to one processing recipe (the step about to
+    consume the crop). Returns (grow_recipe, seed_id, sown, returned), both
+    per crop, or None.
+    """
+    for grow in (all_recipes.get(crop_id) or {}).get('crafting', []):
+        made = sum(
+            o.get('quantity', 1) for o in grow.get('craftedItemStacks', [])
+            if str(o.get('item_id', '')) == crop_id
+        )
+        inputs = [i for i in grow.get('consumedItemStacks', []) if i.get('item_type') == 'item']
+        if made <= 0 or any(str(i['item_id']) == crop_id for i in inputs):
+            continue
+        for seed in inputs:
+            seed_id = str(seed['item_id'])
+            sown = seed['quantity'] / made
+            procs = [process] if process else (all_recipes.get(seed_id) or {}).get('crafting', [])
+            for proc in procs:
+                proc_inputs = [i for i in proc.get('consumedItemStacks', []) if i.get('item_type') == 'item']
+                crop_in = sum(i['quantity'] for i in proc_inputs if str(i['item_id']) == crop_id)
+                if not crop_in:
+                    continue
+                seed_in = sum(i['quantity'] for i in proc_inputs if str(i['item_id']) == seed_id)
+                returned = (_expected_yield(proc, seed_id, all_recipes, game_data) - seed_in) / crop_in
+                if returned > sown:
+                    return grow, seed_id, sown, returned
+    return None
+
+
 def _find_loot_source(item_id, all_recipes):
     """
     Search for a using-recipe on any item that directly or indirectly produces item_id.
@@ -375,8 +447,14 @@ def _add_activation_cost(quantity, entry, tp, tools, acc, visited, depth,
 
 
 def _resolve_crafting_recipe(item_id, quantity, recipe, tools, acc, visited,
-                              depth, all_recipes, game_data, skill_names):
-    """Shared logic for crafting + loot-chain processing steps."""
+                              depth, all_recipes, game_data, skill_names,
+                              free=frozenset()):
+    """
+    Shared logic for crafting + loot-chain processing steps.
+
+    free: ingredients not to charge for, because a step further up the chain
+    returns them (seeds come back when the crop is husked).
+    """
     tp = _get_tool_power(recipe, tools)
     output_qty = 1
     for out in recipe.get('craftedItemStacks', []):
@@ -385,6 +463,25 @@ def _resolve_crafting_recipe(item_id, quantity, recipe, tools, acc, visited,
             break
     if output_qty <= 0:
         output_qty = 1
+
+    # Crops this step processes that can be replanted from the seed it returns.
+    cycles = {}
+    for ing in recipe.get('consumedItemStacks', []):
+        if ing.get('item_type') != 'item' or str(ing['item_id']) in free:
+            continue
+        cycle = _replant_cycle(str(ing['item_id']), all_recipes, game_data, process=recipe)
+        if cycle:
+            cycles[str(ing['item_id'])] = (cycle, ing['quantity'])
+    if cycles:
+        # Processing a crop fills a Products box: husking a plant gives ~40
+        # grain, not the 1 box the recipe lists.
+        output_qty = _expected_yield(recipe, item_id, all_recipes, game_data) or output_qty
+    for (grow, seed_id, sown, returned), crop_in in cycles.values():
+        if seed_id == item_id:
+            # Making the seed itself: the crops grown for this step sow part of
+            # what it returns, so only the surplus counts.
+            output_qty = (returned - sown) * crop_in
+            free = free | {item_id}
 
     actions = max(recipe.get('actionsRequired', 1), 1)
     crafts_needed = quantity / output_qty
@@ -411,9 +508,33 @@ def _resolve_crafting_recipe(item_id, quantity, recipe, tools, acc, visited,
     for ing in recipe.get('consumedItemStacks', []):
         if ing.get('item_type') != 'item':
             continue
+        ing_id = str(ing['item_id'])
+        if ing_id in free:
+            continue
         ing_qty = ing['quantity'] * crafts_needed
+        if ing_id in cycles:
+            (grow, seed_id, sown, returned), _ = cycles[ing_id]
+            # Seen from the seed's side the cycle's grow step is seed extraction
+            # (1 Basic Embergrain Plant → 3 seeds), not passive planting, and
+            # the roles are swapped.
+            seed, crop, back, per = (
+                (seed_id, ing_id, returned, sown) if grow.get('isPassive', True)
+                else (ing_id, seed_id, 1 / sown, 1 / returned)
+            )
+            seed_name = (all_recipes.get(seed) or {}).get('name') or seed
+            crop_name = (all_recipes.get(crop) or {}).get('name') or crop
+            acc.warn(
+                f'{seed_name}: processing {crop_name} returns ~{back:.2g} per '
+                f'{per:.2g} sown, so only a starting stock is needed.'
+            )
+            _resolve_crafting_recipe(
+                ing_id, ing_qty, grow, tools, acc, visited | {ing_id},
+                depth + 1, all_recipes, game_data, skill_names,
+                free=frozenset({seed_id}),
+            )
+            continue
         resolve_effort(
-            str(ing['item_id']),
+            ing_id,
             ing_qty,
             all_recipes, game_data, tools, acc,
             visited, depth + 1, skill_names,
@@ -591,7 +712,10 @@ def resolve_effort(
         | set(game_data.get('cargo_by_item', {}).keys())
     )
     if recipe.get('crafting'):
-        best = _pick_best_crafting(recipe['crafting'], tools, all_known, item_id)
+        # A crop that can be replanted from its own returned seed is grown that
+        # way; the processing step that makes the seed charges the cycle.
+        cycle = _replant_cycle(item_id, all_recipes, game_data)
+        best = cycle[0] if cycle else _pick_best_crafting(recipe['crafting'], tools, all_known, item_id)
         if best:
             _resolve_crafting_recipe(
                 item_id, quantity, best, tools, acc, visited,
