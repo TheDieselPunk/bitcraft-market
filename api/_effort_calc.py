@@ -700,9 +700,12 @@ def resolve_effort(
     # game_data.json entries, which also cover wrapper drops (berry bushes,
     # T4 fish, ...) resolved to per-item probabilities. Pick from both: a node
     # whose recipe only lists a wrapper can beat one that drops the item directly.
+    # Skip wrapper-resolved cargo filed under the same id (cargo 3002 Emarium Ore
+    # Chunk vs item 3002 Ancient Journal Page #3).
     ext_candidates = (
         recipe.get('extraction', [])
-        + game_data.get('extraction_by_item', {}).get(item_id, [])
+        + [e for e in game_data.get('extraction_by_item', {}).get(item_id, [])
+           if not e.get('cargo_input_id')]
     )
     if ext_candidates:
         best = _pick_best_extraction(ext_candidates, tools, item_id)

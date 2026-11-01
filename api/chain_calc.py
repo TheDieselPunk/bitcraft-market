@@ -78,6 +78,19 @@ def _yield_per_cast(entry, power, game_data):
     return entry['prob_per_hp'] * (min(power, hp) if hp else power)
 
 
+# extraction_by_item also holds wrapper-resolved cargo under its cargo id, and
+# cargo ids overlap item ids (cargo 3002 Emarium Ore Chunk, item 3002 Ancient
+# Journal Page #3), so every lookup keeps only the entries for the kind it wants.
+def _item_sources(ebi, item_id):
+    """Nodes that drop the item itself."""
+    return [e for e in ebi.get(item_id, []) if not e.get('cargo_input_id')]
+
+
+def _cargo_sources(ebi, cex, cargo_id):
+    """Nodes that drop the cargo, directly (cargo_extraction) or via a wrapper item."""
+    return [e for e in ebi.get(cargo_id, []) if e.get('cargo_input_id') == cargo_id] + cex.get(cargo_id, [])
+
+
 def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
                       tool_powers, gather_speed, craft_speed, game_data, recipes):
     """
@@ -110,7 +123,7 @@ def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
         craft_stamina  = craft_attempts * bait_recipe.get('stamina_per_action', 0.0)
         craft_time     = craft_attempts * bait_recipe.get('time_per_action', 1.6) / craft_speed
 
-        for fe in ebi.get(bait_fish_id, []):
+        for fe in _item_sources(ebi, bait_fish_id):
             power         = _tool_power(fe.get('tool_requirements', []), tool_powers)
             prob          = _yield_per_cast(fe, power, game_data)
             if prob <= 0:
@@ -233,7 +246,7 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
     sid = str(item_id)
 
     # ── Path 1: directly extractable item ────────────────────────────────────
-    direct = [e for e in ebi.get(sid, []) if not e.get('cargo_input_id')]
+    direct = _item_sources(ebi, sid)
     if direct:
         # Highest-yield source (e.g. Baited Spot over Baited School)
         fe = max(direct, key=lambda e: e['prob_per_hp'])
@@ -278,7 +291,7 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
             proc_stamina  = proc_attempts * ce.get('stamina_per_action', 0.0)
             proc_time     = proc_attempts * ce.get('time_per_action', 1.6) / craft_speed
 
-            for fe in ebi.get(cargo_id, []) + cex.get(cargo_id, []):
+            for fe in _cargo_sources(ebi, cex, cargo_id):
                 power = _tool_power(fe.get('tool_requirements', []), tool_powers)
                 prob  = _yield_per_cast(fe, power, game_data)
                 if prob <= 0:
@@ -452,7 +465,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
     sid = str(item_id)
 
     # ── Method A: Direct extraction ───────────────────────────────────────────
-    for e in ebi.get(sid, []):
+    for e in _item_sources(ebi, sid):
         tool_reqs = e.get('tool_requirements', [])
         tool_type = tool_reqs[0]['tool_type'] if tool_reqs else None
         power = tool_powers.get(tool_type, 1) if tool_type is not None else 1
@@ -516,8 +529,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
         proc_time     = proc_attempts * ce.get('time_per_action', 1.6) / craft_speed
         cargo_name    = ce.get('cargo_input_name', item_name(fish_id, recipes, game_data))
 
-        # Cargo source may be in extraction_by_item (wrapper-resolved) OR cargo_extraction (direct)
-        fish_sources = ebi.get(fish_id, []) + cex.get(fish_id, [])
+        fish_sources = _cargo_sources(ebi, cex, fish_id)
         for fe in fish_sources:
             f_tool_reqs = fe.get('tool_requirements', [])
             f_tool_type = f_tool_reqs[0]['tool_type'] if f_tool_reqs else None
@@ -600,7 +612,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
         proc_time     = proc_attempts * ic.get('time_per_action', 1.6) / craft_speed
         input_name    = ic.get('input_item_name', item_name(input_id, recipes, game_data))
 
-        for fe in ebi.get(input_id, []):
+        for fe in _item_sources(ebi, input_id):
             f_tool_reqs = fe.get('tool_requirements', [])
             f_tool_type = f_tool_reqs[0]['tool_type'] if f_tool_reqs else None
             f_power = tool_powers.get(f_tool_type, 1) if f_tool_type is not None else 1

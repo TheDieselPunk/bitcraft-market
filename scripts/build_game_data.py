@@ -193,8 +193,14 @@ def build_cargo_by_item(crafting_list, cargo_extraction, extraction_by_item,
     If an output item is a wrapper (item_list_id != 0), resolve it via
     item_list_desc and re-key by actual item IDs.
     """
-    # All cargo IDs that can be obtained in-world (directly or via wrapper)
-    obtainable_cargo = set(cargo_extraction.keys()) | set(extraction_by_item.keys())
+    # All cargo IDs that can be obtained in-world (directly or via wrapper).
+    # extraction_by_item is keyed by item id, and wrapper cargo shares it, so only
+    # entries tagged with the cargo count: item 1 Hex Coin drops from loot, but
+    # that doesn't make cargo 1 (Sagi Bird) gatherable.
+    obtainable_cargo = set(cargo_extraction) | {
+        cid for cid, entries in extraction_by_item.items()
+        if any(e.get('cargo_input_id') == cid for e in entries)
+    }
 
     by_item = {}
 
