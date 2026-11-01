@@ -55,6 +55,21 @@ const EquipSets = (() => {
     'TailoringCritChance':      'Tailor',
   };
 
+  const PROF_CRIT_MULT_STATS = {
+    'CarpentryCritMultiplier':      'Carpenter',
+    'FarmingCritMultiplier':        'Farmer',
+    'FishingCritMultiplier':        'Fisher',
+    'ForagingCritMultiplier':       'Forager',
+    'ForestryCritMultiplier':       'Forester',
+    'HuntingCritMultiplier':        'Hunter',
+    'LeatherworkingCritMultiplier': 'Leatherworker',
+    'MasonryCritMultiplier':        'Mason',
+    'MiningCritMultiplier':         'Miner',
+    'ScholarCritMultiplier':        'Scholar',
+    'SmithingCritMultiplier':       'Smith',
+    'TailoringCritMultiplier':      'Tailor',
+  };
+
   // ── Stat accumulation (no DOM access) ─────────────────────────────────────
 
   function _accumStat(stats, s) {
@@ -69,17 +84,13 @@ const EquipSets = (() => {
       case STAT.CRAFT_SPEED:   stats.craftSpeed  += s.value; break;
       case STAT.BUILD_SPEED:   stats.buildSpeed  += s.value; break;
       default: {
+        const bonus = prof => stats.profBonuses[prof] ||= { speed: 0, critChance: 0, critMult: 0 };
         const profSpeed = PROF_SPEED_STATS[s.id];
-        if (profSpeed) {
-          if (!stats.profBonuses[profSpeed]) stats.profBonuses[profSpeed] = { speed: 0, critChance: 0 };
-          stats.profBonuses[profSpeed].speed += s.value;
-          break;
-        }
+        if (profSpeed) { bonus(profSpeed).speed += s.value; break; }
         const profCrit = PROF_CRIT_STATS[s.id];
-        if (profCrit) {
-          if (!stats.profBonuses[profCrit]) stats.profBonuses[profCrit] = { speed: 0, critChance: 0 };
-          stats.profBonuses[profCrit].critChance += s.value;
-        }
+        if (profCrit) { bonus(profCrit).critChance += s.value; break; }
+        const profCritMult = PROF_CRIT_MULT_STATS[s.id];
+        if (profCritMult) bonus(profCritMult).critMult += s.value;
       }
     }
   }

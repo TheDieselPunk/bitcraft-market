@@ -70,6 +70,9 @@
     .ring-check input[type=checkbox] { accent-color: var(--accent); flex-shrink: 0; cursor: pointer; }
     .ring-check.ring-inactive { opacity: 0.4; }
     .ring-subtitle { font-size: 11px; color: var(--fg-dim); margin-bottom: 4px; }
+    .trinket-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 12px; }
+    .trinket-grid label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .crit-summary { font-size: 12px; color: var(--fg); margin-top: 10px; }
 
     /* ── Buttons ── */
     .btn {
@@ -141,6 +144,8 @@
     }
     .metric-val   { font-size: 22px; font-weight: 700; color: var(--accent2); line-height: 1.1; }
     .metric-label { font-size: 10px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
+    .metric-val.gold { color: var(--yellow); }
+    .market-note { font-size: 11px; color: var(--fg-dim); margin-bottom: 12px; line-height: 1.5; }
 
     /* ── Steps table ── */
     .steps-table { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
@@ -212,6 +217,21 @@
         <label>Quantity</label>
         <input type="number" id="quantity" value="100" min="1" step="1" />
       </div>
+      <div class="two-col">
+        <div class="field" style="margin:0">
+          <label>Rank By</label>
+          <select id="rank-by" onchange="rerender()">
+            <option value="stamina">Least stamina</option>
+            <option value="gph_instant">Gold/hr — sell to buy orders</option>
+            <option value="gph_listed">Gold/hr — list at lowest ask</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0">
+          <label>Travel / Node (min)</label>
+          <input type="number" id="node-minutes" value="0" min="0" step="0.5" oninput="rerender()"
+                 title="Minutes to reach and bait/chum each node. The chain's own time doesn't include it; gold/hr does." />
+        </div>
+      </div>
     </div>
 
     <!-- Player Autofill -->
@@ -257,11 +277,13 @@
       </div>
     </div>
 
-    <!-- Argent Rings -->
+    <!-- Rings & Trinkets -->
     <div class="card">
-      <div class="card-title">Argent Rings</div>
-      <div class="ring-subtitle">+15% effective power when equipped (30% chance × 1.5×)</div>
+      <div class="card-title">Rings &amp; Trinkets</div>
+      <div class="ring-subtitle">Mark what you own; each tool uses your best ring + trinket. Expected power = 1 + crit chance × (0.5 + crit bonus).</div>
       <div class="ring-grid" id="ring-grid"></div>
+      <div class="trinket-grid" id="trinket-grid"></div>
+      <div class="crit-summary" id="crit-summary"></div>
     </div>
 
     <!-- Equipment Sets -->
@@ -289,45 +311,110 @@
 
 <script src="/equipment_sets.js"></script>
 <script>
-// ── Argent Rings ──────────────────────────────────────────────────────────────
-// toolParam: which tool power this ring's crit applies to (null = not in current chains)
-const CRIT_MULT = 1 + 0.3 * 0.5;  // 0.7×1.0 + 0.3×1.5 = 1.15 expected power multiplier
+// ── Rings & Trinkets ──────────────────────────────────────────────────────────
+// Crits add expected power: 1 + critChance × (BASE_CRIT_MULT + critMult bonuses).
+// Argent rings give 30% chance (multi-profession rings also +0.05 crit×);
+// trinkets (Ancient Survival Kit, Perfect Obsidian, ...) give +0.20…+0.40 crit×.
+// Owned rings/trinkets are assumed swapped in per activity, so each tool takes its best pair.
+const BASE_CRIT_MULT = 0.5;
+const TOOL_SKILL     = { rod: 'Fishing', pick: 'Mining', axe: 'Forestry', hammer: 'Smithing' };
+const TRINKET_RANKS  = ['I', 'II', 'III', 'IV', 'V', 'VI'];
 
-const RINGS = [
-  { id: '1598355237', label: "Fisher's",        toolParam: 'rod'  },
-  { id: '1576333470', label: "Miner's",          toolParam: 'pick' },
-  { id: '49775758',   label: "Forester's",       toolParam: 'axe'  },
-  { id: '765471747',  label: "Smith's",          toolParam: 'hammer' },
-  { id: '799730992',  label: "Carpenter's",      toolParam: null   },
-  { id: '991210407',  label: "Tailor's",         toolParam: null   },
-  { id: '1567406362', label: "Farmer's",         toolParam: null   },
-  { id: '1686646239', label: "Leatherworker's",  toolParam: null   },
-  { id: '1872241174', label: "Hunter's",         toolParam: null   },
-  { id: '213597211',  label: "Forager's",        toolParam: null   },
-  { id: '319478789',  label: "Mason's",          toolParam: null   },
-  { id: '1928102640', label: "Scholar's",        toolParam: null   },
-];
+let RINGS            = [];  // [{id, label, chance: {Skill: v}, mult: {Skill: v}}]
+let TRINKET_FAMILIES = [];  // [{label, tiers: [{id, rank, chance, mult}]}], tiers ascending
 
-function initRings() {
-  const grid = document.getElementById('ring-grid');
-  grid.innerHTML = RINGS.map(r => `
-    <label class="ring-check${r.toolParam ? '' : ' ring-inactive'}"
-           title="${r.label} Argent Ring${r.toolParam ? ' (+15% ' + r.toolParam + ' power)' : ' (not used in current chains)'}">
-      <input type="checkbox" id="ring-${r.id}">
-      ${r.label}
-    </label>`).join('');
+function critStats(entry) {
+  const chance = {}, mult = {};
+  for (const s of entry.stats || []) {
+    if (s.id.endsWith('CritChance'))     chance[s.id.slice(0, -'CritChance'.length)] = s.value;
+    if (s.id.endsWith('CritMultiplier')) mult[s.id.slice(0, -'CritMultiplier'.length)] = s.value;
+  }
+  return { chance, mult };
 }
 
-function ringMultiplier(toolParam) {
-  const ring = RINGS.find(r => r.toolParam === toolParam);
-  if (!ring) return 1.0;
-  return document.getElementById(`ring-${ring.id}`)?.checked ? CRIT_MULT : 1.0;
+async function initRings() {
+  let equip = {};
+  try {
+    equip = (await (await fetch('/data/equipment_data.json')).json()).equipment || {};
+  } catch { /* catalog unavailable: no ring/trinket bonuses */ }
+
+  RINGS = (equip.jewelry || [])
+    .map(e => ({ id: e.id, label: e.name.replace(/ Argent Ring$/, ''), ...critStats(e) }))
+    .filter(r => Object.keys(r.chance).length)
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  const families = {};
+  for (const e of equip.trinket || []) {
+    const crit = critStats(e);
+    if (!Object.keys(crit.mult).length) continue;
+    const [, label, rank = 'I'] = e.name.match(/^(.*?)(?: \(([IV]+)\))?$/);
+    (families[label] ||= { label, tiers: [] }).tiers.push({ id: e.id, rank, ...crit });
+  }
+  TRINKET_FAMILIES = Object.values(families).sort((a, b) => a.label.localeCompare(b.label));
+  for (const f of TRINKET_FAMILIES)
+    f.tiers.sort((a, b) => TRINKET_RANKS.indexOf(a.rank) - TRINKET_RANKS.indexOf(b.rank));
+
+  const chainSkills = new Set(Object.values(TOOL_SKILL));
+  document.getElementById('ring-grid').innerHTML = RINGS.map(r => {
+    const skills = Object.keys(r.chance);
+    const used   = skills.some(s => chainSkills.has(s));
+    return `
+    <label class="ring-check${used ? '' : ' ring-inactive'}"
+           title="${escHtml(r.label)} Argent Ring: ${skills.join(', ')}${used ? '' : ' (not used in current chains)'}">
+      <input type="checkbox" id="ring-${r.id}" onchange="renderCritSummary()">
+      ${escHtml(r.label)}
+    </label>`;
+  }).join('');
+
+  document.getElementById('trinket-grid').innerHTML = TRINKET_FAMILIES.map((f, i) => {
+    const skills = Object.keys(f.tiers[0].mult);
+    return `
+    <div class="field" style="margin:0" title="Crit multiplier for ${skills.join(', ')}">
+      <label>${escHtml(f.label)}</label>
+      <select id="trinket-${i}" onchange="renderCritSummary()">
+        <option value="">None</option>
+        ${f.tiers.map(t => `<option value="${t.id}">${t.rank} (+${t.mult[skills[0]].toFixed(2)} crit×)</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('');
+
+  renderCritSummary();
+}
+
+function selectedTrinkets() {
+  return TRINKET_FAMILIES
+    .map((f, i) => f.tiers.find(t => t.id === document.getElementById(`trinket-${i}`)?.value))
+    .filter(Boolean);
+}
+
+function critMultiplier(toolParam) {
+  const skill    = TOOL_SKILL[toolParam];
+  const none     = { chance: {}, mult: {} };
+  const rings    = [none, ...RINGS.filter(r => document.getElementById(`ring-${r.id}`)?.checked)];
+  const trinkets = [none, ...selectedTrinkets()];
+  let best = 1.0;
+  for (const r of rings) for (const t of trinkets) {
+    const chance = (r.chance[skill] || 0) + (t.chance[skill] || 0);
+    const mult   = BASE_CRIT_MULT + (r.mult[skill] || 0) + (t.mult[skill] || 0);
+    best = Math.max(best, 1 + chance * mult);
+  }
+  return best;
+}
+
+function renderCritSummary() {
+  const parts = Object.keys(TOOL_SKILL)
+    .map(tp => [tp, critMultiplier(tp)])
+    .filter(([, m]) => m > 1)
+    .map(([tp, m]) => `${tp[0].toUpperCase() + tp.slice(1)} ×${m.toFixed(3)}`);
+  document.getElementById('crit-summary').textContent =
+    parts.length ? `Power from crits: ${parts.join(' · ')}` : 'No crit bonus on chain tools';
 }
 
 // ── State ────────────────────────────────────────────────────────────────────
 let selectedItemId   = null;
 let selectedItemName = '';
 let itemSearchTimer  = null;
+let lastData         = null;  // last /api/chain_calc response, for re-ranking
 
 // ── Item Search ──────────────────────────────────────────────────────────────
 function onItemInput() {
@@ -396,18 +483,15 @@ async function autofillPlayer() {
   status.textContent = 'Searching…';
 
   try {
-    const res  = await fetch(`/api/search?q=${encodeURIComponent(username)}`);
+    const res  = await fetch(`/api/search?username=${encodeURIComponent(username)}`);
     const data = await res.json();
-    const players = data.players || [];
-    if (!players.length) { status.textContent = 'Player not found.'; return; }
+    if (!res.ok || data.error) { status.textContent = data.error || 'Player not found.'; return; }
 
-    const player = players.find(p => p.username?.toLowerCase() === username.toLowerCase()) || players[0];
-    const pid = player.entityId;
-
-    const invRes  = await fetch(`/api/inventories?player_id=${pid}`);
+    const invRes  = await fetch(`/api/inventories?player_id=${data.player_id}`);
     const invData = await invRes.json();
-    applyToolbelt(invData);
-    status.textContent = `Loaded: ${player.username}`;
+    await ringsReady;
+    status.textContent = `Loaded: ${data.username}`;
+    applyToolbelt(invData);  // replaces the status with a tools/rings/trinkets summary
   } catch (e) {
     status.textContent = `Error: ${e.message}`;
   }
@@ -441,23 +525,20 @@ function applyToolbelt(data) {
   if (toolMap[1])  document.getElementById('axe-power').value    = toolMap[1].power  || 1;
   if (toolMap[5])  document.getElementById('hammer-power').value = toolMap[5].power  || 1;
 
-  // ── Argent ring autofill ──────────────────────────────────────────────────
-  // Collect all item IDs the player owns (inventory bags)
-  const ownedIds = new Set(Object.keys(items));
-  // Also include worn equipment items (matched by name)
-  const wornNames = new Set(
-    (data.equipment || []).map(e => (e.item?.name || e.name || '').toLowerCase())
-  );
-
-  // Uncheck all first, then check what's owned
+  // ── Ring & trinket autofill: anything carried in a bag or worn ────────────
+  const ownedIds = new Set([
+    ...Object.keys(items),
+    ...(data.equipment || []).map(e => e.item?.id).filter(id => id != null).map(String),
+  ]);
   for (const ring of RINGS) {
     const cb = document.getElementById(`ring-${ring.id}`);
-    if (!cb) continue;
-    const ownedInBag      = ownedIds.has(ring.id);
-    const wornName        = `${ring.label.toLowerCase()} argent ring`;
-    const ownedWorn       = wornNames.has(wornName);
-    cb.checked = ownedInBag || ownedWorn;
+    if (cb) cb.checked = ownedIds.has(ring.id);
   }
+  TRINKET_FAMILIES.forEach((f, i) => {
+    const best = f.tiers.filter(t => ownedIds.has(t.id)).pop();  // tiers ascend, so last owned = best
+    document.getElementById(`trinket-${i}`).value = best ? best.id : '';
+  });
+  renderCritSummary();
 
   const status = document.getElementById('search-status');
   const parts = [];
@@ -467,6 +548,11 @@ function applyToolbelt(data) {
   if (toolMap[5])  parts.push(`Hammer ×${toolMap[5].power}`);
   const checkedRings = RINGS.filter(r => document.getElementById(`ring-${r.id}`)?.checked);
   if (checkedRings.length) parts.push(`Rings: ${checkedRings.map(r => r.label).join(', ')}`);
+  const ownedTrinkets = TRINKET_FAMILIES
+    .map((f, i) => [f, f.tiers.find(t => t.id === document.getElementById(`trinket-${i}`).value)])
+    .filter(([, t]) => t)
+    .map(([f, t]) => `${f.label} ${t.rank}`);
+  if (ownedTrinkets.length) parts.push(`Trinkets: ${ownedTrinkets.join(', ')}`);
   if (parts.length) status.textContent = parts.join(' · ');
 }
 
@@ -478,10 +564,10 @@ async function calculate() {
   }
 
   const quantity    = parseFloat(document.getElementById('quantity').value) || 100;
-  const rodPower    = (parseFloat(document.getElementById('rod-power').value)    || 1) * ringMultiplier('rod');
-  const pickPower   = (parseFloat(document.getElementById('pick-power').value)   || 1) * ringMultiplier('pick');
-  const axePower    = (parseFloat(document.getElementById('axe-power').value)    || 1) * ringMultiplier('axe');
-  const hammerPower = (parseFloat(document.getElementById('hammer-power').value) || 1) * ringMultiplier('hammer');
+  const rodPower    = (parseFloat(document.getElementById('rod-power').value)    || 1) * critMultiplier('rod');
+  const pickPower   = (parseFloat(document.getElementById('pick-power').value)   || 1) * critMultiplier('pick');
+  const axePower    = (parseFloat(document.getElementById('axe-power').value)    || 1) * critMultiplier('axe');
+  const hammerPower = (parseFloat(document.getElementById('hammer-power').value) || 1) * critMultiplier('hammer');
   const speedPct    = parseFloat(document.getElementById('gather-speed').value) || 0;
   const craftPct    = parseFloat(document.getElementById('craft-speed').value)  || 0;
   const gatherSpeed = 1.0 + speedPct / 100;
@@ -501,10 +587,33 @@ async function calculate() {
   try {
     const res  = await fetch(url);
     const data = await res.json();
+    lastData = data;
     renderResults(data);
   } catch (e) {
     showError(`Network error: ${e.message}`);
   }
+}
+
+// Re-rank / re-price the last result without refetching (rank or travel changed)
+function rerender() {
+  if (lastData) renderResults(lastData);
+}
+
+// Gold/hr for a method: live value of everything it yields (incl. processing
+// co-products) minus external ingredients bought at the ask, over the chain's
+// time plus travel to each node.
+function methodEconomics(m, qty) {
+  const nodeMin = parseFloat(document.getElementById('node-minutes').value) || 0;
+  const nodes   = m.items_per_full_node ? qty / m.items_per_full_node : 0;
+  const hours   = (m.total_time_seconds + nodes * nodeMin * 60) / 3600;
+  const mk      = m.market;
+  if (!mk || hours <= 0) return { nodes, nodeMin, hours, gphInstant: null, gphListed: null };
+  const cost = mk.external_cost || 0;
+  return {
+    nodes, nodeMin, hours,
+    gphInstant: (mk.revenue_instant - cost) / hours,
+    gphListed:  (mk.revenue_listed  - cost) / hours,
+  };
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────
@@ -522,21 +631,35 @@ function renderResults(data) {
     return;
   }
 
-  // Find best (lowest total stamina)
-  const bestIdx = methods.reduce((bi, m, i) => m.total_stamina < methods[bi].total_stamina ? i : bi, 0);
+  // Rank methods by the chosen metric; the first is "best"
+  const qty    = data.quantity || 1;
+  const rankBy = document.getElementById('rank-by').value;
+  const econ   = new Map(methods.map(m => [m, methodEconomics(m, qty)]));
+  const score  = m => rankBy === 'stamina' ? -m.total_stamina
+    : (econ.get(m)[rankBy === 'gph_instant' ? 'gphInstant' : 'gphListed'] ?? -Infinity);
+  const ranked = [...methods].sort((a, b) => score(b) - score(a));
+  const badge  = rankBy === 'stamina' ? 'Most Efficient' : 'Best Gold/hr';
 
   let html = '';
+  if (data.market_ok) {
+    html += `<div class="market-note">Gold/hr counts everything a route yields, incl. filets and scales from processing,
+      at live BitJita prices. <strong>Instant</strong> sells into today's buy orders (units they can't absorb earn nothing);
+      <strong>listed</strong> lists at the lowest ask and assumes it sells.</div>`;
+  } else if (rankBy !== 'stamina') {
+    html += `<div class="market-note">Live market prices are unavailable right now, so gold/hr can't be ranked.</div>`;
+  }
 
   // Method cards
-  methods.forEach((m, idx) => {
-    const isBest = idx === bestIdx;
+  ranked.forEach((m, idx) => {
+    const isBest = idx === 0;
+    const e      = econ.get(m);
     html += `<div class="method-card${isBest ? ' best' : ''}">`;
     html += `<div class="method-header">
       <div>
         <div class="method-title">${escHtml(m.method_name)}</div>
         <div class="method-node">${escHtml(m.node_label)}</div>
       </div>
-      ${isBest ? '<div class="best-badge">Most Efficient</div>' : ''}
+      ${isBest ? `<div class="best-badge">${badge}</div>` : ''}
     </div>`;
 
     // Big metrics
@@ -564,7 +687,21 @@ function renderResults(data) {
         <div class="metric-label">Per Node</div>
       </div>`;
     }
+    if (e.gphInstant != null) {
+      html += `<div class="metric-box">
+        <div class="metric-val gold">${fmt(e.gphInstant, 0)}</div>
+        <div class="metric-label">Gold/hr Instant</div>
+      </div>
+      <div class="metric-box">
+        <div class="metric-val gold">${fmt(e.gphListed, 0)}</div>
+        <div class="metric-label">Gold/hr Listed</div>
+      </div>`;
+    }
     html += `</div>`; // /metrics-row
+    if (e.gphInstant != null && e.nodes && e.nodeMin) {
+      html += `<div class="market-note" style="margin:-6px 0 12px">Gold/hr includes ${fmt(e.nodes, 1)} nodes × ${e.nodeMin} min travel
+        (${fmtTime(e.nodes * e.nodeMin * 60)} on top of the chain's ${fmtTime(m.total_time_seconds)}).</div>`;
+    }
 
     // Steps table
     html += `<table class="steps-table">
@@ -635,12 +772,52 @@ function renderResults(data) {
         <span style="font-size:11px;opacity:0.7">(not included in stamina/time above — obtain separately)</span>
       </div>`;
     }
+
+    // What the route's output sells for
+    const mk = m.market;
+    if (mk) {
+      html += `<table class="steps-table" style="margin-top:10px">
+        <thead><tr>
+          <th>Sells As</th>
+          <th class="num">Quantity</th>
+          <th class="num">Ask / Bid</th>
+          <th class="num">Instant</th>
+          <th class="num">Listed</th>
+        </tr></thead>
+        <tbody>`;
+      for (const p of mk.products) {
+        const partial = p.instant_units < p.quantity - 0.5
+          ? `<span style="font-size:11px;color:var(--fg-dim)"> (bids take ${fmt(p.instant_units, 0)})</span>` : '';
+        html += `<tr>
+          <td>${escHtml(p.name)}</td>
+          <td class="num">${fmt(p.quantity, 0)}</td>
+          <td class="num">${p.ask ?? '—'} / ${p.bid ?? '—'}</td>
+          <td class="num">${fmt(p.instant_gold, 0)}${partial}</td>
+          <td class="num">${fmt(p.listed_gold, 0)}</td>
+        </tr>`;
+      }
+      if (mk.external_cost) {
+        html += `<tr>
+          <td>External ingredients (bought at ask)</td><td></td><td></td>
+          <td class="num">−${fmt(mk.external_cost, 0)}</td>
+          <td class="num">−${fmt(mk.external_cost, 0)}</td>
+        </tr>`;
+      }
+      const unpriced = mk.external_unpriced.length
+        ? ` <span style="font-size:11px;color:var(--fg-dim)">(no price: ${mk.external_unpriced.map(escHtml).join(', ')})</span>` : '';
+      html += `<tr style="border-top:1px solid var(--border)">
+          <td><strong>Net gold</strong>${unpriced}</td><td></td><td></td>
+          <td class="num"><strong>${fmt(mk.revenue_instant - mk.external_cost, 0)}</strong></td>
+          <td class="num"><strong>${fmt(mk.revenue_listed - mk.external_cost, 0)}</strong></td>
+        </tr>
+        </tbody></table>`;
+    }
     html += `</div>`; // /method-card
   });
 
   // Summary comparison table
   if (methods.length > 1) {
-    const qty = data.quantity || 1;
+    const gold = !!data.market_ok;
     html += `<div class="summary-card">
       <div class="summary-title">Efficiency Comparison (per unit)</div>
       <table class="summary-table">
@@ -649,11 +826,13 @@ function renderResults(data) {
           <th class="num">Stamina / unit</th>
           <th class="num">Time / unit</th>
           <th class="num">Full Node Yield</th>
+          ${gold ? '<th class="num">Gold/hr Instant</th><th class="num">Gold/hr Listed</th>' : ''}
         </tr></thead>
         <tbody>`;
 
-    methods.forEach((m, idx) => {
-      const isBest = idx === bestIdx;
+    ranked.forEach((m, idx) => {
+      const isBest = idx === 0;
+      const e = econ.get(m);
       const stampUnit = m.total_stamina / qty;
       const timeUnit  = m.total_time_seconds / qty;
       const nodeYield = m.items_per_full_node != null ? fmt(m.items_per_full_node, 1) : '—';
@@ -662,6 +841,7 @@ function renderResults(data) {
         <td class="num">${fmt(stampUnit, 3)}</td>
         <td class="num">${fmtTime(timeUnit)}</td>
         <td class="num">${nodeYield}</td>
+        ${gold ? `<td class="num">${fmt(e.gphInstant, 0)}</td><td class="num">${fmt(e.gphListed, 0)}</td>` : ''}
       </tr>`;
     });
 
@@ -705,7 +885,7 @@ function fmtTime(sec) {
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
-initRings();
+const ringsReady = initRings();
 initEquipSets();
 
 // ── Equipment Sets ────────────────────────────────────────────────────────────

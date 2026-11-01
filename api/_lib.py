@@ -54,7 +54,9 @@ def load_recipes_cache():
 
 
 def get_player_id(username):
-    """Look up a player by username and return their entity ID, or None if not found."""
+    """Look up a player by username (or a raw entity ID) and return their entity ID, or None if not found."""
+    if username.isdigit() and len(username) >= 15:
+        return username
     data = api_get('/api/players', {'q': username, 'limit': 5})
     players = data.get('players', [])
     # Exact match first, then partial
@@ -76,7 +78,7 @@ def get_toolbelt(player_id):
     tools = {}
 
     for bag in data.get('inventories', []):
-        if bag.get('inventoryName', '').lower() != 'toolbelt':
+        if (bag.get('inventoryName') or '').lower() != 'toolbelt':  # some bags have null names
             continue
         for pocket in bag.get('pockets', []):
             contents = pocket.get('contents')

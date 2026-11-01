@@ -28,7 +28,7 @@ GAMEDATA_BASE = (
 )
 OUT_FILE = Path(__file__).parent.parent / 'data' / 'equipment_data.json'
 
-EQUIPMENT_TAGS = {'Leather Clothing', 'Cloth Clothing', 'Automata Heart', 'Jewelry'}
+EQUIPMENT_TAGS = {'Leather Clothing', 'Cloth Clothing', 'Automata Heart', 'Jewelry', 'Trinket'}
 BUFF_TAGS      = {'Meal', 'Elixir'}
 
 # Map BitCraftToolBox slot names to our UI slot names
@@ -41,10 +41,11 @@ SLOT_MAP = {
     'HandClothing':  'hands',
     'HeadArtifact':  'heart',    # Automata Hearts
     'HandArtifact':  'jewelry',  # Rings
+    'FeetArtifact':  'trinket',  # Trinkets (Ancient Survival Kit, Perfect Obsidian, ...)
 }
 
 # Sort order for rarity strings
-RARITY_ORDER = {'Common': 0, 'Uncommon': 1, 'Rare': 2, 'Epic': 3, 'Legendary': 4}
+RARITY_ORDER = {'Common': 0, 'Uncommon': 1, 'Rare': 2, 'Epic': 3, 'Legendary': 4, 'Mythic': 5}
 
 # Stats relevant to the Equipment Simulator (others are ignored for now)
 RELEVANT_STATS = {
@@ -66,6 +67,11 @@ RELEVANT_STATS = {
     'ScholarCritChance',   'ScholarSpeed',
     'SmithingCritChance',  'SmithingSpeed',
     'TailoringCritChance', 'TailoringSpeed',
+    # per-profession crit multiplier (trinkets, multi-profession argent rings)
+    'CarpentryCritMultiplier', 'FarmingCritMultiplier',  'FishingCritMultiplier',
+    'ForagingCritMultiplier',  'ForestryCritMultiplier', 'HuntingCritMultiplier',
+    'LeatherworkingCritMultiplier', 'MasonryCritMultiplier', 'MiningCritMultiplier',
+    'ScholarCritMultiplier',   'SmithingCritMultiplier', 'TailoringCritMultiplier',
 }
 
 

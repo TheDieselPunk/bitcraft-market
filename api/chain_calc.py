@@ -1,8 +1,9 @@
 """
-GET /api/chain_calc?item_id=X&quantity=Y&rod_power=Z&gather_speed=W&craft_speed=V&pick_power=A&axe_power=B
+GET /api/chain_calc?item_id=X&quantity=Y&rod_power=Z&gather_speed=W&craft_speed=V&pick_power=A&axe_power=B[&market=0]
 
 Returns all extraction/cargo-chain methods for producing a given item, with
-stamina, time and cast/action breakdowns per method.
+stamina, time and cast/action breakdowns per method, plus each method's
+products (target + processing co-products) valued at live BitJita prices.
 
 gather_speed  multiplier applied to fishing/extraction time (e.g. 1.05 = +5%)
 craft_speed   multiplier applied to crafting/processing time (separate stat)
@@ -17,6 +18,8 @@ from urllib.parse import urlparse, parse_qs
 
 sys.path.insert(0, os.path.dirname(__file__))
 from _lib import load_game_data, load_recipes_cache, cors_headers
+from _effort_calc import activation_yield
+from _market import order_books, sell_instant, sell_listed
 
 
 # tool_type int -> param name
@@ -36,12 +39,15 @@ _NODE_PATTERNS = [
 ]
 
 
-def node_label(node_id):
+def node_label(node_id, game_data=None):
     nid = str(node_id)
     for pattern, tmpl in _NODE_PATTERNS:
         m = pattern.match(nid)
         if m:
             return tmpl.replace('{tier}', m.group(1))
+    activation = (game_data or {}).get('node_activation', {}).get(nid)
+    if activation:
+        return activation['name']
     return f'Node {nid}'
 
 
@@ -56,9 +62,6 @@ def item_name(item_id, recipes, game_data=None):
         if name:
             return name
     return sid
-
-
-CHUM_DURATION_SECS = 900  # 15 minutes per chum
 
 
 def _tool_power(tool_reqs, tool_powers):
@@ -135,105 +138,73 @@ def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
     return [], 0.0, 0.0
 
 
-def compute_chum_cost(tier, total_ocean_casts, time_per_cast,
-                      tool_powers, gather_speed, craft_speed, game_data, recipes):
+def compute_activation_cost(fe, items_needed, power, tool_powers, gather_speed, craft_speed,
+                            game_data, recipes, visited=frozenset()):
     """
-    Compute the extra cost of producing chum for total_ocean_casts ocean casts.
-    Each chum lasts CHUM_DURATION_SECS seconds of fishing.
+    Compute the bait/chum cost of activating enough of fe's nodes to gather
+    items_needed (Hidden Spot / Dormant School baited, ocean School chummed —
+    see node_activation in build_game_data.py). The bait/chum itself is
+    resolved through resolve_item_crafting_chain.
 
     Returns (extra_steps, extra_stamina, extra_time_sec, external_ingredients).
-    external_ingredients = list of {item_name, quantity} for items not calculable
-    (e.g. raw meat from hunting).
     """
-    casts_per_chum = CHUM_DURATION_SECS / max(time_per_cast, 0.1)
-    chum_needed    = total_ocean_casts / casts_per_chum
-    chum_id        = str(tier * 1_000_000 + 110_026)   # e.g. 5110026
+    rid = str(fe['resource_id'])
+    activation = game_data.get('node_activation', {}).get(rid)
+    if not activation:
+        return [], 0.0, 0.0, []
+    per_node = activation_yield(
+        activation, game_data.get('resource_max_health', {}).get(rid),
+        fe['prob_per_hp'], power, fe['time_per_cast'], gather_speed,
+    )
+    if per_node <= 0:
+        return [], 0.0, 0.0, []
 
-    icbi = game_data.get('item_chain_by_item', {})
-    ebi  = game_data.get('extraction_by_item', {})
+    nodes = items_needed / per_node
+    kind  = 'chum' if activation['verb'] == 'Chum' else 'bait'
+    act_stamina = activation['stamina'] * nodes
+    act_time    = activation['time'] * nodes / gather_speed
 
-    for chum_recipe in icbi.get(chum_id, []):
-        chum_per_run    = chum_recipe.get('output_quantity', 1)
-        if chum_per_run <= 0:
+    extra_steps, extra_stamina, extra_time, external = [], act_stamina, act_time, []
+    for it in activation['items']:
+        qty = it['quantity'] * nodes
+        sub = resolve_item_crafting_chain(
+            it['item_id'], qty, tool_powers, gather_speed, craft_speed,
+            game_data, recipes, visited
+        )
+        if sub is None:
+            external.append({'item_id': str(it['item_id']), 'item_name': it['item_name'], 'quantity': qty})
             continue
-
-        lake_fish_id    = str(chum_recipe['input_item_id'])
-        lake_fish_name  = chum_recipe.get('input_item_name', lake_fish_id)
-        lake_fish_qty   = chum_recipe.get('input_item_qty', 10)
-        craft_runs      = chum_needed / chum_per_run
-        lake_fish_needed = craft_runs * lake_fish_qty
-
-        total_work      = craft_runs * chum_recipe['actions_required']
-        craft_power     = _tool_power(chum_recipe.get('tool_requirements', []), tool_powers)
-        craft_attempts  = total_work / craft_power
-        craft_stamina   = craft_attempts * chum_recipe.get('stamina_per_action', 0.0)
-        craft_time      = craft_attempts * chum_recipe.get('time_per_action', 1.6) / craft_speed
-
-        # External ingredients (raw meat etc.)
-        external = [
-            {
-                'item_name': c['item_name'],
-                'quantity':  chum_needed * c['quantity'],
-            }
-            for c in chum_recipe.get('other_consumed', [])
+        sub_steps, sub_stam, sub_time, sub_ext = sub
+        # Tag as bait_/chum_ steps so the page groups them under the activation
+        extra_steps += [
+            dict(s, type=f'{kind}_fish' if s['type'] in ('extract', 'fish') or s['type'].endswith('_fish')
+                 else f'{kind}_craft')
+            for s in sub_steps
         ]
+        extra_stamina += sub_stam
+        extra_time    += sub_time
+        external      += sub_ext
 
-        extra_steps = []
-        extra_stamina = craft_stamina
-        extra_time    = craft_time
-
-        for fe in ebi.get(lake_fish_id, []):
-            power         = _tool_power(fe.get('tool_requirements', []), tool_powers)
-            prob          = fe['prob_per_hp'] * power
-            if prob <= 0:
-                continue
-            fish_casts    = lake_fish_needed / prob
-            fish_stamina  = fish_casts * fe['stamina_per_cast']
-            fish_time     = fish_casts * fe['time_per_cast'] / gather_speed
-
-            extra_steps   += [{
-                'type':     'chum_fish',
-                'label':    f'Catch {lake_fish_name} (for chum)',
-                'qty_out':  lake_fish_needed,   # lake fish caught for chum
-                'qty_label': lake_fish_name,
-                'casts':    fish_casts,
-                'stamina':  fish_stamina,
-                'time_sec': fish_time,
-            }]
-            extra_stamina += fish_stamina
-            extra_time    += fish_time
-
-            # Bait cost for the chum lake fishing
-            for b in fe.get('consumed', []):
-                b_steps, b_stam, b_time = compute_bait_cost(
-                    b['item_id'], b['consumption_chance'], fish_casts,
-                    tool_powers, gather_speed, craft_speed, game_data, recipes
-                )
-                extra_steps   = b_steps + extra_steps   # bait steps come first
-                extra_stamina += b_stam
-                extra_time    += b_time
-            break  # use first extraction source
-
-        extra_steps += [{
-            'type':     'chum_craft',
-            'label':    f'Craft {item_name(chum_id, recipes)} (chum)',
-            'qty_out':  chum_needed,
-            'qty_label': item_name(chum_id, recipes),
-            'actions':  craft_attempts,
-            'stamina':  craft_stamina,
-            'time_sec': craft_time,
-        }]
-
-        return extra_steps, extra_stamina, extra_time, external
-
-    return [], 0.0, 0.0, []
+    window = activation.get('duration_sec')
+    extra_steps.append({
+        'type':      f'{kind}_craft',
+        'label':     f"{activation['verb']} {activation['source_name']}"
+                     + (f' (open {window // 60} min, ~{per_node:.1f} per node solo)' if window else ''),
+        'qty_out':   nodes,
+        'qty_label': 'nodes',
+        'actions':   nodes,
+        'stamina':   act_stamina,
+        'time_sec':  act_time,
+    })
+    return extra_steps, extra_stamina, extra_time, external
 
 
 def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, craft_speed,
-                               game_data, recipes, visited=None):
+                               game_data, recipes, visited=None, demand=None):
     """
     Recursively resolve a multi-step production chain for item_id.
     Returns (steps, total_stamina, total_time_sec, external_ingredients) or None if unresolvable.
+    demand: {item_id: quantity} requested by each crafting level up the chain.
 
     Resolution order:
       1. Direct extraction (non-cargo ebi entry) → extract step
@@ -256,7 +227,8 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
     # ── Path 1: directly extractable item ────────────────────────────────────
     direct = [e for e in ebi.get(sid, []) if not e.get('cargo_input_id')]
     if direct:
-        fe = direct[0]
+        # Highest-yield source (e.g. Baited Spot over Baited School)
+        fe = max(direct, key=lambda e: e['prob_per_hp'])
         power = _tool_power(fe.get('tool_requirements', []), tool_powers)
         prob  = fe['prob_per_hp'] * power
         if prob > 0:
@@ -266,8 +238,12 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
             iname   = item_name(sid, recipes, game_data)
             tt      = fe.get('tool_requirements', [{}])[0].get('tool_type') if fe.get('tool_requirements') else None
             verb    = 'Chop' if tt == 1 else 'Mine' if tt == 4 else 'Extract'
+            a_steps, a_stam, a_time, a_ext = compute_activation_cost(
+                fe, quantity, power, tool_powers, gather_speed, craft_speed,
+                game_data, recipes, visited | {sid}
+            )
             return (
-                [{
+                a_steps + [{
                     'type':     'extract',
                     'label':    f'{verb} {iname}',
                     'qty_out':  quantity,
@@ -276,7 +252,7 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
                     'stamina':  stamina,
                     'time_sec': time_s,
                 }],
-                stamina, time_s, []
+                stamina + a_stam, time_s + a_time, a_ext
             )
 
     # ── Path 2: from cargo unpack (e.g. Ore Chunk → Ore Piece) ───────────────
@@ -306,8 +282,12 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
                 iname_out   = item_name(sid, recipes, game_data)
                 tt          = fe.get('tool_requirements', [{}])[0].get('tool_type') if fe.get('tool_requirements') else None
                 verb        = 'Chop' if tt == 1 else 'Mine' if tt == 4 else 'Extract'
+                a_steps, a_stam, a_time, a_ext = compute_activation_cost(
+                    fe, cargo_needed, power, tool_powers, gather_speed, craft_speed,
+                    game_data, recipes, visited | {sid}
+                )
                 return (
-                    [
+                    a_steps + [
                         {
                             'type':     'extract',
                             'label':    f'{verb} {cargo_name}',
@@ -327,15 +307,22 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
                             'time_sec': proc_time,
                         },
                     ],
-                    mine_stam + proc_stamina,
-                    mine_time + proc_time,
-                    []
+                    mine_stam + proc_stamina + a_stam,
+                    mine_time + proc_time + a_time,
+                    a_ext
                 )
 
     # ── Path 3: item-to-item crafting ─────────────────────────────────────────
     if sid in i2i:
         new_visited = visited | {sid}
-        for recipe in i2i[sid]:
+        new_demand  = {**(demand or {}), sid: quantity}
+        # Prefer real recipes over Enrich (consumes its own output) and
+        # Unpack (consumes a market package) when both exist.
+        def _is_loop(r):
+            return any(c['item_id'] == sid or c.get('item_type') == 'Cargo' and 'Unpack' in r.get('recipe_name', '')
+                       for c in r.get('consumed', []))
+        fallback = None
+        for recipe in sorted(i2i[sid], key=_is_loop):
             out_qty = recipe.get('output_quantity', 1)
             if out_qty <= 0:
                 continue
@@ -363,10 +350,10 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
 
                 sub = resolve_item_crafting_chain(
                     c_id, c_qty_needed, tool_powers, gather_speed, craft_speed,
-                    game_data, recipes, new_visited
+                    game_data, recipes, new_visited, new_demand
                 )
                 if sub is None:
-                    external.append({'item_name': c_name, 'quantity': c_qty_needed})
+                    external.append({'item_id': str(c_id), 'item_name': c_name, 'quantity': c_qty_needed})
                 else:
                     sub_steps, sub_stam, sub_time, sub_ext = sub
                     pre_steps   += sub_steps
@@ -384,14 +371,57 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
                 'stamina':  craft_stamina,
                 'time_sec': craft_time,
             }
-            return (
+            result = (
                 pre_steps + [craft_step],
                 pre_stamina + craft_stamina,
                 pre_time + craft_time,
                 external
             )
+            # A recipe whose inputs lead back to an item already up the chain
+            # returns some of that item as "external". A fraction of what that
+            # level makes is a productive loop (seeds → plant → more seeds), but
+            # needing at least as much as it makes can't pay for itself (Split
+            # Refined Rough Leather to get Rough Leather for Refined Rough
+            # Leather) — try the next recipe. Enrich/Unpack are only a fallback.
+            starved = any(x.get('item_id') in new_demand and x['quantity'] >= new_demand[x['item_id']]
+                          for x in external)
+            if not _is_loop(recipe) and not starved:
+                return result
+            fallback = fallback or result
+        return fallback
 
     return None
+
+
+_recipe_outputs_cache = {'game_data': None, 'outputs': {}}
+
+
+def recipe_outputs(game_data):
+    """
+    {(table, recipe_id, input_id): {output_id: qty per run}} for every processing
+    recipe in cargo_by_item / item_chain_by_item. Processing a fish yields a
+    Products box, so one run gives filets, scales, ... alongside the oil.
+    """
+    cache = _recipe_outputs_cache
+    if cache['game_data'] is not game_data:
+        outputs = {}
+        for table, input_key in (('cargo_by_item', 'cargo_input_id'), ('item_chain_by_item', 'input_item_id')):
+            for out_id, entries in game_data.get(table, {}).items():
+                for e in entries:
+                    if e.get('recipe_id') is None:
+                        continue
+                    per_run = outputs.setdefault((table, e['recipe_id'], str(e[input_key])), {})
+                    per_run[out_id] = per_run.get(out_id, 0) + e['output_quantity']
+        cache.update(game_data=game_data, outputs=outputs)
+    return cache['outputs']
+
+
+def _products(table, entry, input_id, runs, item_id, quantity, game_data):
+    """Everything `runs` runs of entry's processing recipe yield (just item_id if unknown)."""
+    per_run = recipe_outputs(game_data).get((table, entry.get('recipe_id'), input_id))
+    if not per_run:
+        return {str(item_id): quantity}
+    return {out_id: qty * runs for out_id, qty in per_run.items()}
 
 
 def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_speed, game_data, recipes):
@@ -401,7 +431,8 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
     Each method dict:
       method_name, source_node, node_label, fish_name,
       steps, total_stamina, total_time_seconds, total_casts, total_actions,
-      items_per_full_node
+      items_per_full_node, external_ingredients,
+      products ({item_id: qty} — the target plus processing co-products)
     """
     methods = []
     ebi  = game_data.get('extraction_by_item', {})
@@ -432,15 +463,19 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
         # items per full node = base prob only (tool power speeds up but doesn't change total yield)
         items_per_node = float(node_health) * e['prob_per_hp'] if node_health else None
 
-        label = node_label(rid)
+        label = node_label(rid, game_data)
         iname = item_name(item_id, recipes)
+
+        act_steps, act_stamina, act_time, act_external = compute_activation_cost(
+            e, quantity, power, tool_powers, gather_speed, craft_speed, game_data, recipes
+        )
 
         methods.append({
             'method_name': f'Direct — {label}',
             'source_node': rid,
             'node_label':  label,
             'fish_name':   None,
-            'steps': [{
+            'steps': act_steps + [{
                 'type':     'extract',
                 'label':    f'Extract {iname}',
                 'qty_out':  quantity,
@@ -449,11 +484,13 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'stamina':  stamina,
                 'time_sec': time_sec,
             }],
-            'total_stamina':       stamina,
-            'total_time_seconds':  time_sec,
+            'total_stamina':       stamina + act_stamina,
+            'total_time_seconds':  time_sec + act_time,
             'total_casts':         total_casts,
             'total_actions':       0.0,
             'items_per_full_node': items_per_node,
+            'external_ingredients': act_external,
+            'products':            {sid: quantity},
         })
 
     # ── Method B: Cargo chain ─────────────────────────────────────────────────
@@ -494,19 +531,12 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
             # output items from one full node depletion
             items_per_node = fish_per_node * oil_per_fish if fish_per_node else None
 
-            label = node_label(rid)
-            total_stamina = fish_stamina + proc_stamina
-            total_time    = fish_time + proc_time
+            label = node_label(rid, game_data)
 
-            # Chum cost for ocean nodes (resource pattern *110003)
-            chum_steps, chum_stamina, chum_time, chum_external = [], 0.0, 0.0, []
-            tier_match = re.match(r'^(\d)110003$', rid)
-            if tier_match:
-                tier = int(tier_match.group(1))
-                chum_steps, chum_stamina, chum_time, chum_external = compute_chum_cost(
-                    tier, total_fish_casts, fe['time_per_cast'],
-                    tool_powers, gather_speed, craft_speed, game_data, recipes
-                )
+            # Chum cost for ocean nodes (any tier with a node_activation entry)
+            chum_steps, chum_stamina, chum_time, chum_external = compute_activation_cost(
+                fe, fish_needed, f_power, tool_powers, gather_speed, craft_speed, game_data, recipes
+            )
 
             total_stamina = fish_stamina + proc_stamina + chum_stamina
             total_time    = fish_time    + proc_time    + chum_time
@@ -543,6 +573,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'total_actions':       proc_attempts,
                 'items_per_full_node': items_per_node,
                 'external_ingredients': chum_external,
+                'products': _products('cargo_by_item', ce, fish_id, fish_needed, sid, quantity, game_data),
             })
 
     # ── Method C: Item chain (extract item → craft → output) ─────────────────
@@ -580,9 +611,9 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
             fish_per_node = float(node_health) * fe['prob_per_hp'] if node_health else None
             items_per_node = fish_per_node * oil_per_fish if fish_per_node else None
 
-            label = node_label(rid)
+            label = node_label(rid, game_data)
 
-            # Bait cost for large-lake nodes that consume bait per cast
+            # Bait cost for nodes that consume bait per cast
             bait_steps, bait_stamina, bait_time = [], 0.0, 0.0
             for b in fe.get('consumed', []):
                 bs, bstam, btime = compute_bait_cost(
@@ -592,6 +623,15 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 bait_steps  += bs
                 bait_stamina += bstam
                 bait_time    += btime
+
+            # Bait cost for Baited Spots/Schools (bait spent once per node)
+            act_steps, act_stamina, act_time, act_external = compute_activation_cost(
+                fe, fish_needed, f_power, tool_powers, gather_speed, craft_speed,
+                game_data, recipes, frozenset({sid})
+            )
+            bait_steps   += act_steps
+            bait_stamina += act_stamina
+            bait_time    += act_time
 
             total_stamina = fish_stamina + proc_stamina + bait_stamina
             total_time    = fish_time    + proc_time    + bait_time
@@ -627,7 +667,8 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'total_casts':          total_fish_casts,
                 'total_actions':        proc_attempts,
                 'items_per_full_node':  items_per_node,
-                'external_ingredients': [],
+                'external_ingredients': act_external,
+                'products': _products('item_chain_by_item', ic, input_id, fish_needed, sid, quantity, game_data),
             })
 
     # ── Method D: Multi-step crafting chain (e.g. ingots) ─────────────────────
@@ -654,9 +695,56 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'total_actions':       total_actions,
                 'items_per_full_node': None,
                 'external_ingredients': external,
+                'products':            {sid: quantity},
             })
 
     return methods
+
+
+def price_methods(methods, recipes, game_data):
+    """
+    Attach live market value to each method (m['market']): what its products
+    earn sold instantly into buy orders vs listed at the lowest ask (see
+    _market.py), and what buying its external ingredients at the ask costs.
+    Returns False if no order book could be fetched.
+    """
+    ids = {str(i) for m in methods for i in m.get('products', {})}
+    ids |= {x['item_id'] for m in methods for x in m.get('external_ingredients', []) if x.get('item_id')}
+    if not ids:
+        return False
+    books = order_books(ids)
+
+    for m in methods:
+        products = []
+        for iid, qty in m.get('products', {}).items():
+            book = books[str(iid)]
+            gold, sold = sell_instant(book, qty)
+            name = item_name(iid, recipes, game_data)
+            products.append({
+                'item_id':       str(iid),
+                'name':          book['name'] if name == str(iid) and book['name'] else name,
+                'quantity':      qty,
+                'ask':           book['ask'],
+                'bid':           book['bid'],
+                'instant_gold':  gold,
+                'instant_units': sold,
+                'listed_gold':   sell_listed(book, qty),
+            })
+        external_cost, unpriced = 0.0, []
+        for x in m.get('external_ingredients', []):
+            ask = books.get(x.get('item_id') or '', {}).get('ask')
+            if ask:
+                external_cost += ask * x['quantity']
+            else:
+                unpriced.append(x['item_name'])
+        m['market'] = {
+            'products':          sorted(products, key=lambda p: -p['listed_gold']),
+            'revenue_instant':   sum(p['instant_gold'] for p in products),
+            'revenue_listed':    sum(p['listed_gold'] for p in products),
+            'external_cost':     external_cost,
+            'external_unpriced': unpriced,
+        }
+    return any(b['ask'] is not None or b['bids'] for b in books.values())
 
 
 class handler(BaseHTTPRequestHandler):
@@ -741,12 +829,21 @@ class handler(BaseHTTPRequestHandler):
             self._send(500, {'error': f'Calculation error: {exc}'})
             return
 
+        # Live prices (?market=0 skips the BitJita order-book calls)
+        market_ok = False
+        if methods and _p('market', '1') != '0':
+            try:
+                market_ok = price_methods(methods, recipes, game_data)
+            except Exception:
+                market_ok = False
+
         error = None if methods else 'No chain found for this item'
         self._send(200, {
             'item_id':   item_id_raw,
             'item_name': iname,
             'quantity':  quantity,
             'methods':   methods,
+            'market_ok': market_ok,
             'error':     error,
         })
 

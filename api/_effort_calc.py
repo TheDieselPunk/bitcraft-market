@@ -11,6 +11,10 @@ Key mechanics (confirmed empirically):
   - time_per_item    = time_per_cast    / (prob_per_hp * tool_power)
   - bait_per_item    = consumption_chance / (prob_per_hp * tool_power)
   - Crafting: total_stamina = (actionsRequired / tool_power) * stamina_per_action * crafts_needed
+  - Baited/chummed fishing nodes (game_data['node_activation']) cost a fixed
+    amount of bait/chum per node: items_per_node = usable_hp * prob_per_hp,
+    where usable_hp is the node's max health, capped for chum by how much one
+    player can fish before the node closes (duration_sec).
 """
 
 import math
@@ -83,14 +87,22 @@ def _normalize_extraction(entry, item_id=None):
 
     In both cases the probability value represents per-health-point probability;
     the actual per-cast probability = prob_per_hp * tool_power.
+
+    Only stacks that are item_id itself count. A recipe whose stacks are all
+    other items (side drops like Map to Ice Chest Drop, or a Lakefish Output
+    wrapper) normalizes to prob 0 so the caller falls through to game_data,
+    where wrappers are already resolved to per-item probabilities.
     """
     if 'prob_per_hp' in entry:
         return entry  # already normalized
 
-    # Pick the matching item stack (highest probability if item_id given)
+    # recipes.json stacks are {item_stack: {item_id, quantity, ...}, probability}
     stacks = entry.get('extractedItemStacks', [])
     if item_id:
-        stacks = [s for s in stacks if str(s.get('item_id', '')) == str(item_id)] or stacks
+        stacks = [
+            s for s in stacks
+            if str((s.get('item_stack') or s).get('item_id', '')) == str(item_id)
+        ]
     best_stack = max(stacks, key=lambda s: s.get('probability', 0)) if stacks else {}
 
     consumed = [
@@ -104,7 +116,7 @@ def _normalize_extraction(entry, item_id=None):
 
     return {
         'prob_per_hp':     best_stack.get('probability', 0.0),
-        'output_quantity': best_stack.get('quantity', 1),
+        'output_quantity': (best_stack.get('item_stack') or best_stack).get('quantity', 1),
         'stamina_per_cast': entry.get('staminaRequirement', 0.0),
         'time_per_cast':   entry.get('timeRequirement', 1.6),
         'tool_requirements': [
@@ -118,6 +130,22 @@ def _normalize_extraction(entry, item_id=None):
         'consumed': consumed,
         'resource_id': str(entry.get('resourceId', entry.get('resource_id', ''))),
     }
+
+
+def activation_yield(activation, max_health, prob_per_hp, tool_power, time_per_cast, gather_speed=1.0):
+    """
+    Expected items from one bait/chum activation of a node.
+
+    Each cast removes tool_power HP, so a full node yields max_health * prob_per_hp
+    whatever the tool. A chummed node only stays fishable for duration_sec, which
+    caps the HP one player can remove before it closes.
+    """
+    hp = float(max_health or 0)
+    duration = activation.get('duration_sec')
+    if duration:
+        window_hp = duration * gather_speed / max(time_per_cast, 0.1) * tool_power
+        hp = min(hp, window_hp) if hp else window_hp
+    return hp * prob_per_hp
 
 
 def _get_tool_power(recipe, tools):
@@ -298,6 +326,53 @@ def _resolve_extraction_entry(item_id, quantity, entry, tools, acc, visited,
             visited, depth + 1, skill_names,
         )
 
+    _add_activation_cost(quantity, entry, tp, tools, acc, visited, depth,
+                         all_recipes, game_data, skill_names)
+
+
+def _add_activation_cost(quantity, entry, tp, tools, acc, visited, depth,
+                         all_recipes, game_data, skill_names):
+    """Charge the bait/chum needed to activate enough nodes for `quantity` items."""
+    rid = str(entry.get('resource_id', ''))
+    activation = game_data.get('node_activation', {}).get(rid)
+    if not activation:
+        return
+
+    per_node = activation_yield(
+        activation, game_data.get('resource_max_health', {}).get(rid),
+        entry['prob_per_hp'], tp, entry['time_per_cast'],
+    )
+    source = f"{activation['verb']} {activation['source_name']}".strip()
+    if per_node <= 0:
+        acc.warn(f'{source}: node size unknown — bait/chum not counted.')
+        return
+
+    nodes = quantity / per_node
+    skill = _skill_name(activation, skill_names)
+    acc.add_gather(skill, activation['stamina'] * nodes, activation['time'] * nodes)
+    acc.add_step(
+        item_id=f'node:{rid}',
+        item_name=source,
+        method='extraction',
+        skill=skill,
+        tool_power=tp,
+        quantity=nodes,
+        stamina=round(activation['stamina'] * nodes, 2),
+        time_sec=round(activation['time'] * nodes, 2),
+    )
+    if activation.get('duration_sec'):
+        acc.warn(
+            f"{source}: node stays open {activation['duration_sec'] // 60} min, "
+            f'so one activation yields ~{per_node:.1f} at tool power {tp} (solo).'
+        )
+
+    for it in activation['items']:
+        resolve_effort(
+            it['item_id'], it['quantity'] * nodes,
+            all_recipes, game_data, tools, acc,
+            visited, depth + 1, skill_names,
+        )
+
 
 def _resolve_crafting_recipe(item_id, quantity, recipe, tools, acc, visited,
                               depth, all_recipes, game_data, skill_names):
@@ -349,9 +424,15 @@ def _resolve_crafting_recipe(item_id, quantity, recipe, tools, acc, visited,
 # Cargo resolution (PATH E)
 # ---------------------------------------------------------------------------
 
-def _resolve_cargo_gathering(cargo_id, quantity, game_data, tools, acc, skill_names, cargo_name=''):
+def _resolve_cargo_gathering(cargo_id, quantity, game_data, tools, acc, skill_names, cargo_name='',
+                             all_recipes=None, visited=frozenset(), depth=0):
     """Calculate gathering effort to obtain `quantity` units of a Cargo item."""
-    entries = game_data.get('cargo_extraction', {}).get(cargo_id, [])
+    # Direct cargo drops live in cargo_extraction; cargo that drops via a
+    # wrapper (T1-T6 ocean fish from "Oceanfish Output") is in extraction_by_item.
+    entries = game_data.get('cargo_extraction', {}).get(cargo_id) or [
+        e for e in game_data.get('extraction_by_item', {}).get(cargo_id, [])
+        if e.get('cargo_input_id') == cargo_id
+    ]
     if not entries:
         acc.add_ingredient(f'cargo:{cargo_id}', quantity, cargo_name or cargo_id)
         acc.warn(f'No extraction data for cargo {cargo_id} ({cargo_name}) — counted as external.')
@@ -380,9 +461,13 @@ def _resolve_cargo_gathering(cargo_id, quantity, game_data, tools, acc, skill_na
         time_sec=round(time_per_cargo * quantity, 2),
     )
 
+    if all_recipes is not None:
+        _add_activation_cost(quantity, best, tp, tools, acc, visited, depth,
+                             all_recipes, game_data, skill_names)
+
 
 def _resolve_cargo_recipe(item_id, quantity, recipe, tools, acc, all_recipes,
-                           game_data, skill_names):
+                           game_data, skill_names, visited=frozenset(), depth=0):
     """PATH E: Process a gatherable Cargo item into regular items."""
     tp = _get_tool_power(recipe, tools)
     output_qty = max(recipe.get('output_quantity', 1), 1)
@@ -411,7 +496,8 @@ def _resolve_cargo_recipe(item_id, quantity, recipe, tools, acc, all_recipes,
     cargo_qty  = recipe.get('cargo_input_qty', 1) * crafts_needed
     cargo_name = recipe.get('cargo_input_name', cargo_id)
     if cargo_id:
-        _resolve_cargo_gathering(cargo_id, cargo_qty, game_data, tools, acc, skill_names, cargo_name)
+        _resolve_cargo_gathering(cargo_id, cargo_qty, game_data, tools, acc, skill_names, cargo_name,
+                                 all_recipes, visited, depth)
 
 
 # ---------------------------------------------------------------------------
@@ -477,24 +563,20 @@ def resolve_effort(
         )
         _resolve_cargo_recipe(
             item_id, quantity, best_cargo, tools, acc, all_recipes,
-            game_data, skill_names,
+            game_data, skill_names, visited, depth,
         )
         return
 
-    # --- PATH A: Extraction recipe in recipes.json ---
-    if recipe.get('extraction'):
-        best = _pick_best_extraction(recipe['extraction'], tools, item_id)
-        if best:
-            _resolve_extraction_entry(
-                item_id, quantity, best, tools, acc, visited,
-                depth, all_recipes, game_data, skill_names,
-            )
-            return
-
-    # --- PATH B: Extraction data in game_data.json (T4 fish, etc.) ---
-    gd_entries = game_data.get('extraction_by_item', {}).get(item_id)
-    if gd_entries:
-        best = _pick_best_extraction(gd_entries, tools)
+    # --- PATH A/B: Extraction — recipes.json stacks of item_id itself, plus
+    # game_data.json entries, which also cover wrapper drops (berry bushes,
+    # T4 fish, ...) resolved to per-item probabilities. Pick from both: a node
+    # whose recipe only lists a wrapper can beat one that drops the item directly.
+    ext_candidates = (
+        recipe.get('extraction', [])
+        + game_data.get('extraction_by_item', {}).get(item_id, [])
+    )
+    if ext_candidates:
+        best = _pick_best_extraction(ext_candidates, tools, item_id)
         if best:
             _resolve_extraction_entry(
                 item_id, quantity, best, tools, acc, visited,

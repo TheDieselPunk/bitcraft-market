@@ -15,6 +15,7 @@ Run from the web/ directory:
 """
 
 import json
+import re
 import time
 import urllib.request
 from pathlib import Path
@@ -227,6 +228,7 @@ def build_cargo_by_item(crafting_list, cargo_extraction, extraction_by_item,
                     continue
 
                 entry_base = {
+                    'recipe_id':          r.get('id'),  # groups a recipe's co-products
                     'recipe_name':        r.get('name', ''),
                     'stamina_per_action': r.get('stamina_requirement', 0.0),
                     'time_per_action':    r.get('time_requirement', 1.6),
@@ -322,6 +324,7 @@ def build_item_chain_by_item(crafting_list, extraction_by_item, item_list_by_id,
             input_name = item_by_id.get(item_input.get('item_id', 0), {}).get('name', input_id)
 
             entry_base = {
+                'recipe_id':          r.get('id'),  # groups a recipe's co-products
                 'recipe_name':        r.get('name', ''),
                 'stamina_per_action': r.get('stamina_requirement', 0.0),
                 'time_per_action':    r.get('time_requirement', 1.6),
@@ -455,6 +458,81 @@ def build_item_to_item_crafting(crafting_list, item_by_id, item_list_by_id, carg
     return by_item
 
 
+# Chum descriptions say "Once chummed, nodes remain fishable for 15 minutes."
+_DURATION_RE = re.compile(r'for (\d+) minutes')
+FISHING_SKILL_ID = 12
+
+# Resource tags still in the static data but no longer reachable in game.
+REMOVED_RESOURCE_TAGS = {'Paranensis'}
+
+
+def build_node_activation(extraction_list, resource_list, item_by_id):
+    """
+    Build {activated_resource_id_str -> {verb, source_name, items, ...}}
+
+    Some fishing nodes must be activated before they can be fished. A 1-HP
+    node (Hidden Spot, Dormant School, ocean School) has an extraction recipe
+    that consumes items but extracts nothing (verb "Bait" or "Chum"); one
+    action destroys it and spawns on_destroy_yield_resource_id, the node you
+    actually fish.
+
+    Only Fishing activations are included. Other skills use the same pattern
+    (Sparkstone lava, beehive smoker, vault locks) with multi-stage mechanics
+    this model hasn't been checked against.
+
+    name:         the activated node (e.g. Baited Briny Argus Spot)
+    items:        [{item_id, item_name, quantity}] consumed per activation
+    stamina/time: for the activation action
+    duration_sec: how long the activated node stays fishable, parsed from the
+                  consumed item's description, or None if it lasts until depleted
+    """
+    res_by_id = {r['id']: r for r in resource_list}
+    by_resource = {}
+    for r in extraction_list:
+        if r.get('extracted_item_stacks') or not r.get('consumed_item_stacks'):
+            continue
+        if not any(l.get('skill_id') == FISHING_SKILL_ID for l in r.get('level_requirements', [])):
+            continue
+        src = res_by_id.get(r.get('resource_id')) or {}
+        target = src.get('on_destroy_yield_resource_id') or 0
+        if not target:
+            continue
+
+        consumed = r['consumed_item_stacks']
+        durations = [
+            int(m.group(1)) * 60
+            for c in consumed
+            for m in [_DURATION_RE.search(item_by_id.get(c['item_id'], {}).get('description', ''))]
+            if m
+        ]
+        by_resource[str(target)] = {
+            'name':               res_by_id.get(target, {}).get('name', str(target)),
+            'verb':               r.get('verb_phrase', ''),
+            'source_resource_id': str(src['id']),
+            'source_name':        src.get('name', ''),
+            'items': [
+                {
+                    'item_id':   str(c['item_id']),
+                    'item_name': item_by_id.get(c['item_id'], {}).get('name', str(c['item_id'])),
+                    'quantity':  c.get('quantity', 1) * c.get('consumption_chance', 1.0),
+                }
+                for c in consumed
+            ],
+            'stamina':            r.get('stamina_requirement', 0.0),
+            'time':               r.get('time_requirement', 1.6),
+            'tool_requirements': [
+                {'tool_type': t.get('tool_type'), 'level': t.get('level', 1), 'power': t.get('power', 1)}
+                for t in r.get('tool_requirements', [])
+            ],
+            'level_requirements': [
+                {'skill_id': l.get('skill_id'), 'level': l.get('level', 1)}
+                for l in r.get('level_requirements', [])
+            ],
+            'duration_sec':       min(durations) if durations else None,
+        }
+    return by_resource
+
+
 def build_resource_max_health(resource_list):
     """Build {resource_id_str -> max_health} mapping."""
     result = {}
@@ -478,6 +556,10 @@ def main():
     print('Fetching resource_desc.json ...')
     resource_list = to_list(fetch_json('resource_desc.json'))
     print(f'  {len(resource_list)} resource nodes.')
+
+    removed = {r['id'] for r in resource_list if r.get('tag') in REMOVED_RESOURCE_TAGS}
+    extraction_list = [r for r in extraction_list if r.get('resource_id') not in removed]
+    print(f'  Dropped {len(removed)} removed nodes ({", ".join(sorted(REMOVED_RESOURCE_TAGS))}).')
 
     print('Fetching crafting_recipe_desc.json ...')
     crafting_list = to_list(fetch_json('crafting_recipe_desc.json'))
@@ -512,6 +594,10 @@ def main():
     resource_max_health = build_resource_max_health(resource_list)
     print(f'  {len(resource_max_health)} resource nodes with max_health.')
 
+    print('Building node_activation ...')
+    node_activation = build_node_activation(extraction_list, resource_list, item_by_id)
+    print(f'  {len(node_activation)} nodes that need bait/chum before gathering.')
+
     print('Building cargo_by_item ...')
     cargo_by_item = build_cargo_by_item(
         crafting_list, cargo_extraction, extraction_by_item,
@@ -541,6 +627,7 @@ def main():
         'item_chain_by_item':    item_chain_by_item,
         'item_to_item_crafting': item_to_item_crafting,
         'resource_max_health':   resource_max_health,
+        'node_activation':       node_activation,
         'cargo_extraction':      cargo_extraction,
         'item_names':            item_names,
         'cargo_names':           cargo_names,
@@ -548,6 +635,7 @@ def main():
             'built_at':              time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'extraction_items':      len(extraction_by_item),
             'resources':             len(resource_max_health),
+            'activated_nodes':       len(node_activation),
             'cargo_types':           len(cargo_extraction),
             'cargo_items':           len(cargo_by_item),
             'item_chain_items':      len(item_chain_by_item),
@@ -560,6 +648,7 @@ def main():
     print(f'\n{"-"*50}')
     print(f'Extraction item entries   : {len(extraction_by_item)}')
     print(f'Resource nodes            : {len(resource_max_health)}')
+    print(f'Bait/chum activated nodes : {len(node_activation)}')
     print(f'Cargo extraction types    : {len(cargo_extraction)}')
     print(f'Items via cargo process   : {len(cargo_by_item)}')
     print(f'Items via item chains     : {len(item_chain_by_item)}')

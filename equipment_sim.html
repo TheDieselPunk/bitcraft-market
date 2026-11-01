@@ -107,6 +107,8 @@
     .slot-feet    { top: 310px; left:  104px; }
     /* Jewelry bottom-left */
     .slot-jewelry { top: 310px; left:   12px; }
+    /* Trinket bottom-right */
+    .slot-trinket { top: 310px; right:   0px; }
 
     /* Rarity colours */
     .r-common    { border-color: var(--rarity-common) !important; }
@@ -281,6 +283,9 @@
         <div class="eq-slot slot-jewelry" id="slot-jewelry" onclick="openSlotPicker('jewelry')">
           <div class="slot-icon">💍</div><div class="slot-name">Ring</div>
         </div>
+        <div class="eq-slot slot-trinket" id="slot-trinket" onclick="openSlotPicker('trinket')">
+          <div class="slot-icon">🧰</div><div class="slot-name">Trinket</div>
+        </div>
       </div>
     </div>
 
@@ -388,8 +393,8 @@
 <script>
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const SLOTS = ['head','torso','belt','hands','heart','legs','feet','jewelry'];
-const SLOT_ICONS = {head:'🪖',torso:'👕',belt:'🎗',hands:'🧤',heart:'💜',legs:'👖',feet:'👟',jewelry:'💍'};
+const SLOTS = ['head','torso','belt','hands','heart','legs','feet','jewelry','trinket'];
+const SLOT_ICONS = {head:'🪖',torso:'👕',belt:'🎗',hands:'🧤',heart:'💜',legs:'👖',feet:'👟',jewelry:'💍',trinket:'🧰'};
 
 // Profession definitions matching characterstats2.png
 const PROFESSIONS = [
@@ -570,6 +575,7 @@ const PRIMARY_TO_SLOT = {
   'hand_clothing':  'hands',
   'head_artifact':  'heart',
   'hand_artifact':  'jewelry',
+  'feet_artifact':  'trinket',
 };
 
 function autofillEquipment(equipment) {
@@ -926,6 +932,28 @@ const PROF_CRIT_STATS = {
   'SmithingCritChance':       'Smith',
   'TailoringCritChance':      'Tailor',
 };
+const PROF_CRIT_MULT_STATS = {
+  'CarpentryCritMultiplier':      'Carpenter',
+  'FarmingCritMultiplier':        'Farmer',
+  'FishingCritMultiplier':        'Fisher',
+  'ForagingCritMultiplier':       'Forager',
+  'ForestryCritMultiplier':       'Forester',
+  'HuntingCritMultiplier':        'Hunter',
+  'LeatherworkingCritMultiplier': 'Leatherworker',
+  'MasonryCritMultiplier':        'Mason',
+  'MiningCritMultiplier':         'Miner',
+  'ScholarCritMultiplier':        'Scholar',
+  'SmithingCritMultiplier':       'Smith',
+  'TailoringCritMultiplier':      'Tailor',
+};
+
+const BASE_CRIT_MULT = 0.5;  // a crit deals 1.5× power before trinket/ring bonuses
+
+// Expected power multiplier from crits: 1 + critChance × critMult
+// (e.g. argent ring 30% × base 0.5 = ×1.15; + Ancient Survival Kit IV 0.32 = ×1.246)
+function critPowerFactor(pb) {
+  return 1 + (pb.critChance || 0) * (BASE_CRIT_MULT + (pb.critMult || 0));
+}
 
 function accumStat(stats, s) {
   switch (s.id) {
@@ -939,17 +967,13 @@ function accumStat(stats, s) {
     case STAT.CRAFT_SPEED:   stats.craftSpeed  += s.value; break;
     case STAT.BUILD_SPEED:   stats.buildSpeed  += s.value; break;
     default: {
+      const bonus = prof => stats.profBonuses[prof] ||= { speed: 0, critChance: 0, critMult: 0 };
       const profSpeed = PROF_SPEED_STATS[s.id];
-      if (profSpeed) {
-        if (!stats.profBonuses[profSpeed]) stats.profBonuses[profSpeed] = { speed: 0, critChance: 0 };
-        stats.profBonuses[profSpeed].speed += s.value;
-        break;
-      }
+      if (profSpeed) { bonus(profSpeed).speed += s.value; break; }
       const profCrit = PROF_CRIT_STATS[s.id];
-      if (profCrit) {
-        if (!stats.profBonuses[profCrit]) stats.profBonuses[profCrit] = { speed: 0, critChance: 0 };
-        stats.profBonuses[profCrit].critChance += s.value;
-      }
+      if (profCrit) { bonus(profCrit).critChance += s.value; break; }
+      const profCritMult = PROF_CRIT_MULT_STATS[s.id];
+      if (profCritMult) bonus(profCritMult).critMult += s.value;
     }
   }
 }
@@ -1002,14 +1026,18 @@ function renderProfessionCards(s) {
     speedBonus += (pb.speed || 0);
 
     const critChance = (pb.critChance || 0);
-    const critMult   = 0.5 + (pb.critMult || 0);  // base 0.5
+    const critMult   = BASE_CRIT_MULT + (pb.critMult || 0);
+    const effPower   = power * critPowerFactor(pb);
 
     const card = document.createElement('div');
     card.className = 'prof-card';
     const speedStr = speedBonus !== 0 ? `<span class="pv up">+${(speedBonus*100).toFixed(0)}%</span>` : '<span class="pv">+0%</span>';
+    const powerStr = power && effPower > power
+      ? `<span class="pv up" title="Expected power with crits">${power} → ${effPower.toFixed(1)}</span>`
+      : `<span class="pv">${power || '—'}</span>`;
     card.innerHTML = `
       <div class="prof-name">${prof.id}</div>
-      <div class="prof-stat"><span class="pk">⚒ Power</span>    <span class="pv">${power || '—'}</span></div>
+      <div class="prof-stat"><span class="pk">⚒ Power</span>    ${powerStr}</div>
       <div class="prof-stat"><span class="pk">⚡ Speed</span>    ${speedStr}</div>
       <div class="prof-stat"><span class="pk">✦ Crit</span>     <span class="pv">${critChance > 0 ? critChance.toFixed(2) : '0'}</span></div>
       <div class="prof-stat"><span class="pk">✦ Crit×</span>    <span class="pv">${critMult.toFixed(2)}</span></div>`;
@@ -1043,7 +1071,9 @@ function recalcGather() {
 
   const s = computeStats();
   const toolType = (bestEntry.tool_requirements || [])[0]?.tool_type;
-  const power    = toolType ? ((toolbelt[toolType] || {}).power || 1) : 1;
+  const prof     = PROFESSIONS.find(p => p.toolType === toolType);
+  const critMul  = prof ? critPowerFactor(s.profBonuses[prof.id] || {}) : 1;
+  const power    = (toolType ? ((toolbelt[toolType] || {}).power || 1) : 1) * critMul;
 
   const probPerCast = bestEntry.prob_per_hp * power;
   const baseTimePerCast = bestEntry.time_per_cast || 1.6;
@@ -1056,8 +1086,9 @@ function recalcGather() {
   const itemsPerCast = probPerCast * (bestEntry.output_quantity || 1);
   const health       = rmh[String(node.rid)] || 1;
 
-  const totalCasts   = health;  // one cast per HP
-  const totalItems   = itemsPerCast * health;
+  // A node yields health × prob_per_hp items whatever the tool; power only cuts the casts
+  const totalCasts   = health / power;
+  const totalItems   = itemsPerCast * totalCasts;
   const totalStam    = stamPerCast * totalCasts;
   const totalTimeSec = timePerCast * totalCasts;
   const itemsPerHour = (itemsPerCast / timePerCast) * 3600;
