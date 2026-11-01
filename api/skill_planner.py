@@ -115,6 +115,8 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes, g
     target_xp = level_to_xp(target_level, table)
     xp_gap = max(0, target_xp - current_xp)
     options = []
+    # A recipe is listed under its output and again under each ingredient
+    seen_recipes = set()
 
     for item_id, item_data in recipes.items():
         item_name = item_data.get('name', item_id)
@@ -141,8 +143,9 @@ def build_options_response(skill_id, current_xp, target_level, table, recipes, g
         # ── Crafting / using recipes ──
         for recipe in item_data.get('crafting', []) + item_data.get('using', []):
             exp_qty = _get_exp_qty(recipe, skill_id)
-            if exp_qty <= 0:
+            if exp_qty <= 0 or recipe.get('id') in seen_recipes:
                 continue
+            seen_recipes.add(recipe.get('id'))
             actions_required = recipe.get('actionsRequired', 1) or 1
             xp_per_craft = exp_qty * actions_required
             if xp_per_craft <= 0:

@@ -124,9 +124,9 @@ def compute_bait_cost(bait_id, consumption_chance, total_fish_casts,
                     },
                     {
                         'type':     'bait_craft',
-                        'label':    f'Process {bait_fish_name} → {item_name(bait_id, recipes)}',
+                        'label':    f'Process {bait_fish_name} → {item_name(bait_id, recipes, game_data)}',
                         'qty_out':  bait_needed,
-                        'qty_label': item_name(bait_id, recipes),
+                        'qty_label': item_name(bait_id, recipes, game_data),
                         'actions':  craft_attempts,
                         'stamina':  craft_stamina,
                         'time_sec': craft_time,
@@ -464,7 +464,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
         items_per_node = float(node_health) * e['prob_per_hp'] if node_health else None
 
         label = node_label(rid, game_data)
-        iname = item_name(item_id, recipes)
+        iname = item_name(item_id, recipes, game_data)
 
         act_steps, act_stamina, act_time, act_external = compute_activation_cost(
             e, quantity, power, tool_powers, gather_speed, craft_speed, game_data, recipes
@@ -506,7 +506,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
         proc_attempts = total_work / proc_power
         proc_stamina  = proc_attempts * ce.get('stamina_per_action', 0.75)
         proc_time     = proc_attempts * ce.get('time_per_action', 1.6) / craft_speed
-        cargo_name    = ce.get('cargo_input_name', item_name(fish_id, recipes))
+        cargo_name    = ce.get('cargo_input_name', item_name(fish_id, recipes, game_data))
 
         # Cargo source may be in extraction_by_item (wrapper-resolved) OR cargo_extraction (direct)
         fish_sources = ebi.get(fish_id, []) + cex.get(fish_id, [])
@@ -550,7 +550,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'stamina':  fish_stamina,
                 'time_sec': fish_time,
             }
-            iname_out = item_name(item_id, recipes)
+            iname_out = item_name(item_id, recipes, game_data)
             proc_step = {
                 'type':     'process',
                 'label':    f'Process {cargo_name} → {iname_out}',
@@ -562,7 +562,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
             }
 
             methods.append({
-                'method_name':         f'Cargo — {cargo_name} → {item_name(item_id, recipes)} via {label}',
+                'method_name':         f'Cargo — {cargo_name} → {item_name(item_id, recipes, game_data)} via {label}',
                 'source_node':         rid,
                 'node_label':          label,
                 'fish_name':           cargo_name,
@@ -590,7 +590,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
         proc_attempts = total_work / proc_power
         proc_stamina  = proc_attempts * ic.get('stamina_per_action', 0.0)
         proc_time     = proc_attempts * ic.get('time_per_action', 1.6) / craft_speed
-        input_name    = ic.get('input_item_name', item_name(input_id, recipes))
+        input_name    = ic.get('input_item_name', item_name(input_id, recipes, game_data))
 
         for fe in ebi.get(input_id, []):
             f_tool_reqs = fe.get('tool_requirements', [])
@@ -645,7 +645,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'stamina':  fish_stamina,
                 'time_sec': fish_time,
             }
-            iname_out = item_name(item_id, recipes)
+            iname_out = item_name(item_id, recipes, game_data)
             proc_step = {
                 'type':     'process',
                 'label':    f'Process {input_name} → {iname_out}',
@@ -657,7 +657,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
             }
 
             methods.append({
-                'method_name':          f'Item chain — {input_name} → {item_name(item_id, recipes)} via {label}',
+                'method_name':          f'Item chain — {input_name} → {item_name(item_id, recipes, game_data)} via {label}',
                 'source_node':          rid,
                 'node_label':           label,
                 'fish_name':            input_name,
@@ -682,7 +682,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
             steps, total_stamina, total_time, external = result
             total_casts   = sum(s.get('casts',   0) for s in steps)
             total_actions = sum(s.get('actions', 0) for s in steps)
-            iname = item_name(sid, recipes)
+            iname = item_name(sid, recipes, game_data)
             methods.append({
                 'method_name':         f'Crafting chain — {iname}',
                 'source_node':         None,
@@ -819,7 +819,7 @@ class handler(BaseHTTPRequestHandler):
             self._send(500, {'error': f'Failed to load data: {exc}'})
             return
 
-        iname = item_name(item_id_raw, recipes)
+        iname = item_name(item_id_raw, recipes, game_data)
 
         try:
             methods = resolve_all_methods(

@@ -11,6 +11,8 @@ Also fetches:
     recipesUsingItem recipes — needed for loot-table chains.
   - Ingredient items (e.g. "Emarium Ore Chunk") used in crafting recipes
     but not sold on the market — needed so can_craft() works correctly.
+  - Every other item a crafting or extraction recipe produces, also as an
+    ingredient entry, so items without buy orders can still be looked up.
 
 Uses a thread-safe token bucket rate limiter for the remaining live market
 requests without exceeding the 250 req/min cap.
@@ -25,9 +27,11 @@ import threading
 import urllib.request
 import urllib.parse
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-API_BASE   = 'https://bitjita.com'
-HEADERS    = {'User-Agent': 'BitJita (Billard)', 'Accept': 'application/json'}
+API_BASE    = 'https://bitjita.com'
+HEADERS     = {'User-Agent': 'BitJita (Billard)', 'Accept': 'application/json'}
+MAX_WORKERS = 10          # concurrent connections for tool-price fetches
 STATIC_BASE = (
     'https://raw.githubusercontent.com/BitCraftToolBox/'
     'BitCraft_GameData/cereal/cs/static'
@@ -209,8 +213,8 @@ def normalize_crafting_recipe(recipe, item_by_id, cargo_by_id):
         'timeRequirement':          recipe.get('time_requirement', 1.6),
         'staminaRequirement':       recipe.get('stamina_requirement', 0),
         'toolDurabilityLost':       recipe.get('tool_durability_lost', 0),
-        'buildingRequirementType':  recipe.get('building_requirement_type', 0),
-        'buildingRequirementTier':  recipe.get('building_requirement_tier', 0),
+        'buildingRequirementType':  (recipe.get('building_requirement') or {}).get('building_type', 0),
+        'buildingRequirementTier':  (recipe.get('building_requirement') or {}).get('tier', 0),
         'levelRequirements':        normalize_level_requirements(recipe.get('level_requirements', [])),
         'toolRequirements':         normalize_tool_requirements(recipe.get('tool_requirements', [])),
         'consumedItemStacks':       consumed,
@@ -232,8 +236,8 @@ def normalize_crafting_recipe(recipe, item_by_id, cargo_by_id):
         'craftedItems':             stack_summaries(recipe.get('crafted_item_stacks', []), item_by_id, cargo_by_id),
         'outputQuantity':           direct_output.get('quantity', 1) if direct_output else 1,
         'targetId':                 direct_output.get('item_id') if direct_output else 0,
-        'buildingType':             recipe.get('building_requirement_type', 0),
-        'buildingTier':             recipe.get('building_requirement_tier', 0),
+        'buildingType':             (recipe.get('building_requirement') or {}).get('building_type', 0),
+        'buildingTier':             (recipe.get('building_requirement') or {}).get('tier', 0),
     }
 
 
@@ -402,77 +406,12 @@ def build_ingredient_item(item_id: str, static_indexes: dict) -> dict:
     }
 
 
-# ── Concurrent batch fetcher ────────────────────────────────────────────────
-
-def fetch_batch(ids: list, fetch_fn, label: str) -> dict:
-    """
-    Fetch a list of item IDs concurrently using ThreadPoolExecutor.
-    Returns {item_id: data_dict}.
-    """
-    raise RuntimeError('fetch_batch is unused; recipes are built from static tables')
-    if not ids:
-        return {}
-
-    results = {}
-    errors  = 0
-    done    = 0
-    total   = len(ids)
-
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
-        futures = {ex.submit(fetch_fn, iid): iid for iid in ids}
-        for future in as_completed(futures):
-            iid   = futures[future]
-            done += 1
-            try:
-                results[iid] = future.result()
-            except Exception as e:
-                errors += 1
-                print(f'  ✗ {label} {iid}: {e}')
-            if done % 50 == 0 or done == total:
-                print(f'  {label}: {done}/{total} ({errors} errors)')
-
-    return results
-
-
 # ── Main ────────────────────────────────────────────────────────────────────
-
-def median(values):
-    if not values:
-        return None
-    ordered = sorted(values)
-    mid = len(ordered) // 2
-    if len(ordered) % 2:
-        return ordered[mid]
-    return (ordered[mid - 1] + ordered[mid]) / 2
-
-
-def fetch_sell_order_prices(item_id):
-    data = api_get(f'/api/market/item/{item_id}')
-    listing_list = (
-        data if isinstance(data, list)
-        else data.get('sellOrders', data.get('orders', []))
-    )
-    prices = []
-    for listing in listing_list:
-        price = listing.get('priceThreshold') or listing.get('price')
-        if price is None or float(price) <= 0:
-            continue
-        prices.append(float(price))
-    return prices
 
 
 def main():
     OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     static_indexes = build_static_indexes()
-
-    # Load existing cache so we only re-fetch stale / new items
-    existing: dict = {}
-    if OUT_FILE.exists():
-        try:
-            existing = json.loads(OUT_FILE.read_text())
-            print(f'Loaded {len(existing)} existing cached entries.')
-        except Exception:
-            pass
 
     # ── Pass 1: fetch market item list ──────────────────────────────────────
     print('\nFetching market item list…')
@@ -568,6 +507,22 @@ def main():
         })
         print(f'  Done in {time.monotonic()-t0:.1f}s.')
 
+    # ── Pass 6: every other producible item ──────────────────────────────────
+    # Items nobody is buying right now (e.g. T7–T10 fish oil) are missed by the
+    # passes above, so tools like the Chain Calculator couldn't find them.
+    # Runs last so it never changes an entry the earlier passes built.
+    producible_ids = (set(static_indexes['crafting_by_output']) |
+                      set(static_indexes['extraction_by_output'])) - updated.keys()
+
+    if producible_ids:
+        print(f'\nPass 6 — producible items without buy orders ({len(producible_ids)})…')
+        t0 = time.monotonic()
+        updated.update({
+            iid: build_ingredient_item(iid, static_indexes)
+            for iid in producible_ids
+        })
+        print(f'  Done in {time.monotonic()-t0:.1f}s.')
+
     # ── Summary + metadata ───────────────────────────────────────────────────
     n_market = sum(1 for v in updated.values()
                    if not v.get('intermediate') and not v.get('ingredient'))
@@ -591,26 +546,34 @@ def main():
     print(f'  Built at     : {updated["__meta__"]["built_at"]}')
     print(f'Written to {OUT_FILE}')
 
-    # ── Tool prices pass (always fresh, not cached) ──────────────────────────
-    print(f'\nTool prices — fetching {len(TOOL_INGREDIENT_IDS)} ingredient items…')
+    # ── Tool prices pass (always live from BitJita) ──────────────────────────
+    print(f'\nTool prices — fetching {len(TOOL_INGREDIENT_IDS)} items from BitJita…')
     t0 = time.monotonic()
     tool_prices = {}
     errors = 0
-    for iid in TOOL_INGREDIENT_IDS:
-        try:
-            prices = fetch_sell_order_prices(iid)
-            item = static_indexes['items'].get(int(iid), {})
-            tool_prices[iid] = {
-                'name':            item.get('name', iid),
-                'medianSellPrice': median(prices),
-                'lowestSellPrice': min(prices) if prices else None,
-                'medianBuyPrice':  None,
-                'totalSellOrders': len(prices),
-                'totalBuyOrders':  None,
-            }
-        except Exception as e:
-            errors += 1
-            print(f'  ✗ {iid}: {e}')
+
+    def fetch_tool_price(iid):
+        d     = api_get(f'/api/items/{iid}')
+        stats = d.get('marketStats') or {}
+        return {
+            'name':            d['item']['name'],
+            'medianSellPrice': stats.get('medianSellPrice'),
+            'lowestSellPrice': stats.get('lowestSellPrice'),
+            'medianBuyPrice':  stats.get('medianBuyPrice'),
+            'totalSellOrders': stats.get('totalSellOrders'),
+            'totalBuyOrders':  stats.get('totalBuyOrders'),
+        }
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+        futures = {ex.submit(fetch_tool_price, iid): iid
+                   for iid in TOOL_INGREDIENT_IDS}
+        for future in as_completed(futures):
+            iid = futures[future]
+            try:
+                tool_prices[iid] = future.result()
+            except Exception as e:
+                errors += 1
+                print(f'  ✗ {iid}: {e}')
 
     tool_prices['__meta__'] = {'built_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
     TOOL_PRICES_FILE.write_text(json.dumps(tool_prices))

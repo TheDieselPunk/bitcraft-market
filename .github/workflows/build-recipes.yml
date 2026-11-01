@@ -2,7 +2,7 @@ name: Refresh Recipe Cache
 
 on:
   schedule:
-    - cron: '0 */6 * * *'   # every 6 hours
+    - cron: '0 */6 * * *'   # every 6 hours — market list + tool prices
   workflow_dispatch:         # allow manual trigger from GitHub UI
 
 jobs:

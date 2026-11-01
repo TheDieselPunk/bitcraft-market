@@ -140,7 +140,9 @@ class handler(BaseHTTPRequestHandler):
             extractable, craftable, source_map = classify_items(
                 all_recipes, tools, include_crafting=crafting
             )
-            obtainable = extractable | craftable
+            # Only items with buy orders can show up; checking the rest (ingredients
+            # without buy orders) would just cost an order-book request each
+            obtainable = (extractable | craftable) & market_ids
 
             # 4. Collect buy order stats
             order_results = {}
