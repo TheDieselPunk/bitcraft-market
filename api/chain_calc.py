@@ -13,13 +13,15 @@ import json
 import re
 import sys
 import os
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 sys.path.insert(0, os.path.dirname(__file__))
 from _lib import load_game_data, load_recipes_cache, cors_headers
 from _effort_calc import activation_yield
-from _market import order_books, sell_instant, sell_listed
+from _market import (SALES_WINDOWS, all_recent_sales, order_books,
+                     sell_capped, sell_instant, sell_listed)
 
 
 # tool_type int -> param name
@@ -704,15 +706,19 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
 def price_methods(methods, recipes, game_data):
     """
     Attach live market value to each method (m['market']): what its products
-    earn sold instantly into buy orders vs listed at the lowest ask (see
-    _market.py), and what buying its external ingredients at the ask costs.
-    Returns False if no order book could be fetched.
+    earn sold instantly into buy orders, listed at the lowest ask, or listed
+    but capped by recent sales (see _market.py), and what buying its external
+    ingredients at the ask costs. Returns False if no order book could be fetched.
     """
-    ids = {str(i) for m in methods for i in m.get('products', {})}
-    ids |= {x['item_id'] for m in methods for x in m.get('external_ingredients', []) if x.get('item_id')}
+    product_ids = {str(i) for m in methods for i in m.get('products', {})}
+    ids = product_ids | {x['item_id'] for m in methods
+                         for x in m.get('external_ingredients', []) if x.get('item_id')}
     if not ids:
         return False
-    books = order_books(ids)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        books_f = pool.submit(order_books, ids)
+        sales_f = pool.submit(all_recent_sales, product_ids)
+        books, sales = books_f.result(), sales_f.result()
 
     for m in methods:
         products = []
@@ -720,6 +726,13 @@ def price_methods(methods, recipes, game_data):
             book = books[str(iid)]
             gold, sold = sell_instant(book, qty)
             name = item_name(iid, recipes, game_data)
+            recent = sales.get(str(iid))
+            capped = None
+            if recent:
+                # Nobody listing it right now: price at what it last traded for
+                list_price = book['ask'] or recent['avg_30d']
+                capped = {d: sell_capped(book, qty, recent['units'][d], list_price)[0]
+                          for d in SALES_WINDOWS}
             products.append({
                 'item_id':       str(iid),
                 'name':          book['name'] if name == str(iid) and book['name'] else name,
@@ -729,6 +742,8 @@ def price_methods(methods, recipes, game_data):
                 'instant_gold':  gold,
                 'instant_units': sold,
                 'listed_gold':   sell_listed(book, qty),
+                'sold_recent':   recent['units'] if recent else None,
+                'capped_gold':   capped,
             })
         external_cost, unpriced = 0.0, []
         for x in m.get('external_ingredients', []):
@@ -741,6 +756,9 @@ def price_methods(methods, recipes, game_data):
             'products':          sorted(products, key=lambda p: -p['listed_gold']),
             'revenue_instant':   sum(p['instant_gold'] for p in products),
             'revenue_listed':    sum(p['listed_gold'] for p in products),
+            # None unless every product's trade history came back
+            'revenue_capped':    ({d: sum(p['capped_gold'][d] for p in products) for d in SALES_WINDOWS}
+                                  if all(p['capped_gold'] for p in products) else None),
             'external_cost':     external_cost,
             'external_unpriced': unpriced,
         }

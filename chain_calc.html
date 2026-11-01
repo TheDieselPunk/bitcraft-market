@@ -224,6 +224,7 @@
             <option value="stamina">Least stamina</option>
             <option value="gph_instant">Gold/hr — sell to buy orders</option>
             <option value="gph_listed">Gold/hr — list at lowest ask</option>
+            <option value="gph_capped">Gold/hr — capped by recent sales</option>
           </select>
         </div>
         <div class="field" style="margin:0">
@@ -231,6 +232,15 @@
           <input type="number" id="node-minutes" value="0" min="0" step="0.5" oninput="rerender()"
                  title="Minutes to reach and bait/chum each node. The chain's own time doesn't include it; gold/hr does." />
         </div>
+      </div>
+      <div class="field" style="margin:10px 0 0">
+        <label>Sales Window</label>
+        <select id="sales-window" onchange="rerender()"
+                title="Capped gold/hr lists only as many units as buyers took from listings over this many days.">
+          <option value="1">1 day</option>
+          <option value="7" selected>7 days</option>
+          <option value="30">30 days</option>
+        </select>
       </div>
     </div>
 
@@ -604,17 +614,22 @@ function rerender() {
 // time plus travel to each node.
 function methodEconomics(m, qty) {
   const nodeMin = parseFloat(document.getElementById('node-minutes').value) || 0;
+  const window_ = document.getElementById('sales-window').value;
   const nodes   = m.items_per_full_node ? qty / m.items_per_full_node : 0;
   const hours   = (m.total_time_seconds + nodes * nodeMin * 60) / 3600;
   const mk      = m.market;
-  if (!mk || hours <= 0) return { nodes, nodeMin, hours, gphInstant: null, gphListed: null };
-  const cost = mk.external_cost || 0;
+  if (!mk || hours <= 0) return { nodes, nodeMin, window_, hours, gphInstant: null, gphListed: null, gphCapped: null };
+  const cost   = mk.external_cost || 0;
+  const capped = mk.revenue_capped?.[window_];
   return {
-    nodes, nodeMin, hours,
+    nodes, nodeMin, window_, hours,
     gphInstant: (mk.revenue_instant - cost) / hours,
     gphListed:  (mk.revenue_listed  - cost) / hours,
+    gphCapped:  capped != null ? (capped - cost) / hours : null,
   };
 }
+
+const RANK_KEYS = { gph_instant: 'gphInstant', gph_listed: 'gphListed', gph_capped: 'gphCapped' };
 
 // ── Render ───────────────────────────────────────────────────────────────────
 function renderResults(data) {
@@ -636,7 +651,9 @@ function renderResults(data) {
   const rankBy = document.getElementById('rank-by').value;
   const econ   = new Map(methods.map(m => [m, methodEconomics(m, qty)]));
   const score  = m => rankBy === 'stamina' ? -m.total_stamina
-    : (econ.get(m)[rankBy === 'gph_instant' ? 'gphInstant' : 'gphListed'] ?? -Infinity);
+    : (econ.get(m)[RANK_KEYS[rankBy]] ?? -Infinity);
+  const days   = document.getElementById('sales-window').value;
+  const dayLbl = days === '1' ? '1 day' : `${days} days`;
   const ranked = [...methods].sort((a, b) => score(b) - score(a));
   const badge  = rankBy === 'stamina' ? 'Most Efficient' : 'Best Gold/hr';
 
@@ -644,7 +661,10 @@ function renderResults(data) {
   if (data.market_ok) {
     html += `<div class="market-note">Gold/hr counts everything a route yields, incl. filets and scales from processing,
       at live BitJita prices. <strong>Instant</strong> sells into today's buy orders (units they can't absorb earn nothing);
-      <strong>listed</strong> lists at the lowest ask and assumes it sells.</div>`;
+      <strong>listed</strong> lists at the lowest ask and assumes it sells;
+      <strong>capped</strong> lists only as many units as buyers took from listings over the last ${dayLbl}
+      and sells the rest into lower buy orders. Capped still assumes you get all of those sales,
+      and it falls as quantity grows.</div>`;
   } else if (rankBy !== 'stamina') {
     html += `<div class="market-note">Live market prices are unavailable right now, so gold/hr can't be ranked.</div>`;
   }
@@ -695,6 +715,10 @@ function renderResults(data) {
       <div class="metric-box">
         <div class="metric-val gold">${fmt(e.gphListed, 0)}</div>
         <div class="metric-label">Gold/hr Listed</div>
+      </div>
+      <div class="metric-box">
+        <div class="metric-val gold">${fmt(e.gphCapped, 0)}</div>
+        <div class="metric-label">Gold/hr Capped</div>
       </div>`;
     }
     html += `</div>`; // /metrics-row
@@ -783,6 +807,8 @@ function renderResults(data) {
           <th class="num">Ask / Bid</th>
           <th class="num">Instant</th>
           <th class="num">Listed</th>
+          <th class="num" title="Units buyers took from listings over the sales window">Sold (${days}d)</th>
+          <th class="num">Capped</th>
         </tr></thead>
         <tbody>`;
       for (const p of mk.products) {
@@ -794,6 +820,8 @@ function renderResults(data) {
           <td class="num">${p.ask ?? '—'} / ${p.bid ?? '—'}</td>
           <td class="num">${fmt(p.instant_gold, 0)}${partial}</td>
           <td class="num">${fmt(p.listed_gold, 0)}</td>
+          <td class="num">${fmt(p.sold_recent?.[days], 0)}</td>
+          <td class="num">${fmt(p.capped_gold?.[days], 0)}</td>
         </tr>`;
       }
       if (mk.external_cost) {
@@ -801,14 +829,19 @@ function renderResults(data) {
           <td>External ingredients (bought at ask)</td><td></td><td></td>
           <td class="num">−${fmt(mk.external_cost, 0)}</td>
           <td class="num">−${fmt(mk.external_cost, 0)}</td>
+          <td></td>
+          <td class="num">−${fmt(mk.external_cost, 0)}</td>
         </tr>`;
       }
       const unpriced = mk.external_unpriced.length
         ? ` <span style="font-size:11px;color:var(--fg-dim)">(no price: ${mk.external_unpriced.map(escHtml).join(', ')})</span>` : '';
+      const cappedNet = mk.revenue_capped?.[days];
       html += `<tr style="border-top:1px solid var(--border)">
           <td><strong>Net gold</strong>${unpriced}</td><td></td><td></td>
           <td class="num"><strong>${fmt(mk.revenue_instant - mk.external_cost, 0)}</strong></td>
           <td class="num"><strong>${fmt(mk.revenue_listed - mk.external_cost, 0)}</strong></td>
+          <td></td>
+          <td class="num"><strong>${fmt(cappedNet != null ? cappedNet - mk.external_cost : null, 0)}</strong></td>
         </tr>
         </tbody></table>`;
     }
@@ -826,7 +859,7 @@ function renderResults(data) {
           <th class="num">Stamina / unit</th>
           <th class="num">Time / unit</th>
           <th class="num">Full Node Yield</th>
-          ${gold ? '<th class="num">Gold/hr Instant</th><th class="num">Gold/hr Listed</th>' : ''}
+          ${gold ? '<th class="num">Gold/hr Instant</th><th class="num">Gold/hr Listed</th><th class="num">Gold/hr Capped</th>' : ''}
         </tr></thead>
         <tbody>`;
 
@@ -841,7 +874,7 @@ function renderResults(data) {
         <td class="num">${fmt(stampUnit, 3)}</td>
         <td class="num">${fmtTime(timeUnit)}</td>
         <td class="num">${nodeYield}</td>
-        ${gold ? `<td class="num">${fmt(e.gphInstant, 0)}</td><td class="num">${fmt(e.gphListed, 0)}</td>` : ''}
+        ${gold ? `<td class="num">${fmt(e.gphInstant, 0)}</td><td class="num">${fmt(e.gphListed, 0)}</td><td class="num">${fmt(e.gphCapped, 0)}</td>` : ''}
       </tr>`;
     });
 
