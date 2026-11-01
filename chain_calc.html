@@ -56,7 +56,7 @@
 
     .two-col   { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-    .four-col  { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
+    .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
 
     /* ── Argent ring checkboxes ── */
     .ring-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; margin-top: 6px; }
@@ -257,24 +257,7 @@
     <!-- Tool Powers -->
     <div class="card">
       <div class="card-title">Tool Powers</div>
-      <div class="four-col" style="margin-bottom:12px">
-        <div class="field" style="margin:0">
-          <label>Rod Power</label>
-          <input type="number" id="rod-power" value="1" min="1" max="50" step="1" />
-        </div>
-        <div class="field" style="margin:0">
-          <label>Pick Power</label>
-          <input type="number" id="pick-power" value="1" min="1" max="50" step="1" />
-        </div>
-        <div class="field" style="margin:0">
-          <label>Axe Power</label>
-          <input type="number" id="axe-power" value="1" min="1" max="50" step="1" />
-        </div>
-        <div class="field" style="margin:0">
-          <label>Hammer Power</label>
-          <input type="number" id="hammer-power" value="1" min="1" max="50" step="1" />
-        </div>
-      </div>
+      <div class="tool-grid" id="tool-grid" style="margin-bottom:12px"></div>
       <div class="two-col" style="gap:8px;margin-bottom:0">
         <div class="field" style="margin:0">
           <label>Gather Speed Bonus (%)</label>
@@ -327,8 +310,32 @@
 // trinkets (Ancient Survival Kit, Perfect Obsidian, ...) give +0.20…+0.40 crit×.
 // Owned rings/trinkets are assumed swapped in per activity, so each tool takes its best pair.
 const BASE_CRIT_MULT = 0.5;
-const TOOL_SKILL     = { rod: 'Fishing', pick: 'Mining', axe: 'Forestry', hammer: 'Smithing' };
 const TRINKET_RANKS  = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+
+// One per profession tool: `${key}_power` API param, game/BitJita toolType, crit stat skill.
+const TOOLS = [
+  { key: 'rod',      type: 10, label: 'Rod',      skill: 'Fishing' },
+  { key: 'pick',     type: 4,  label: 'Pick',     skill: 'Mining' },
+  { key: 'axe',      type: 1,  label: 'Axe',      skill: 'Forestry' },
+  { key: 'machete',  type: 12, label: 'Machete',  skill: 'Foraging' },
+  { key: 'bow',      type: 7,  label: 'Bow',      skill: 'Hunting' },
+  { key: 'hoe',      type: 9,  label: 'Hoe',      skill: 'Farming' },
+  { key: 'hammer',   type: 5,  label: 'Hammer',   skill: 'Smithing' },
+  { key: 'saw',      type: 2,  label: 'Saw',      skill: 'Carpentry' },
+  { key: 'chisel',   type: 3,  label: 'Chisel',   skill: 'Masonry' },
+  { key: 'knife',    type: 6,  label: 'Knife',    skill: 'Leatherworking' },
+  { key: 'scissors', type: 8,  label: 'Scissors', skill: 'Tailoring' },
+  { key: 'pot',      type: 11, label: 'Pot',      skill: 'Cooking' },
+  { key: 'quill',    type: 13, label: 'Quill',    skill: 'Scholar' },
+  { key: 'mallet',   type: 14, label: 'Mallet',   skill: 'Construction' },
+];
+const TOOL_SKILL = Object.fromEntries(TOOLS.map(t => [t.key, t.skill]));
+
+document.getElementById('tool-grid').innerHTML = TOOLS.map(t => `
+  <div class="field" style="margin:0" title="${t.label} power">
+    <label for="${t.key}-power">${t.skill}</label>
+    <input type="number" id="${t.key}-power" value="1" min="1" max="50" step="1" />
+  </div>`).join('');
 
 let RINGS            = [];  // [{id, label, chance: {Skill: v}, mult: {Skill: v}}]
 let TRINKET_FAMILIES = [];  // [{label, tiers: [{id, rank, chance, mult}]}], tiers ascending
@@ -412,10 +419,10 @@ function critMultiplier(toolParam) {
 }
 
 function renderCritSummary() {
-  const parts = Object.keys(TOOL_SKILL)
-    .map(tp => [tp, critMultiplier(tp)])
+  const parts = TOOLS
+    .map(t => [t, critMultiplier(t.key)])
     .filter(([, m]) => m > 1)
-    .map(([tp, m]) => `${tp[0].toUpperCase() + tp.slice(1)} ×${m.toFixed(3)}`);
+    .map(([t, m]) => `${t.label} ×${m.toFixed(3)}`);
   document.getElementById('crit-summary').textContent =
     parts.length ? `Power from crits: ${parts.join(' · ')}` : 'No crit bonus on chain tools';
 }
@@ -511,8 +518,8 @@ function applyToolbelt(data) {
   const items = data.items || {};
   const inventories = data.inventories || [];
 
-  // Tool type -> power mapping
-  const toolMap = { 10: null, 4: null, 1: null, 5: null };
+  // Tool type -> highest-level tool in the toolbelt
+  const toolMap = {};
 
   for (const bag of inventories) {
     if (bag.inventoryName?.toLowerCase() !== 'toolbelt') continue;
@@ -524,16 +531,14 @@ function applyToolbelt(data) {
       const lv   = info.toolLevel;
       const pw   = info.toolPower || 0;
       if (tt == null || lv == null) continue;
-      if (toolMap[tt] === null || lv > (toolMap[tt]?.level || 0)) {
+      if (lv > (toolMap[tt]?.level || 0)) {
         toolMap[tt] = { level: lv, power: pw };
       }
     }
   }
 
-  if (toolMap[10]) document.getElementById('rod-power').value    = toolMap[10].power || 1;
-  if (toolMap[4])  document.getElementById('pick-power').value   = toolMap[4].power  || 1;
-  if (toolMap[1])  document.getElementById('axe-power').value    = toolMap[1].power  || 1;
-  if (toolMap[5])  document.getElementById('hammer-power').value = toolMap[5].power  || 1;
+  for (const t of TOOLS)
+    if (toolMap[t.type]) document.getElementById(`${t.key}-power`).value = toolMap[t.type].power || 1;
 
   // ── Ring & trinket autofill: anything carried in a bag or worn ────────────
   const ownedIds = new Set([
@@ -552,10 +557,8 @@ function applyToolbelt(data) {
 
   const status = document.getElementById('search-status');
   const parts = [];
-  if (toolMap[10]) parts.push(`Rod ×${toolMap[10].power}`);
-  if (toolMap[4])  parts.push(`Pick ×${toolMap[4].power}`);
-  if (toolMap[1])  parts.push(`Axe ×${toolMap[1].power}`);
-  if (toolMap[5])  parts.push(`Hammer ×${toolMap[5].power}`);
+  for (const t of TOOLS)
+    if (toolMap[t.type]) parts.push(`${t.label} ×${toolMap[t.type].power}`);
   const checkedRings = RINGS.filter(r => document.getElementById(`ring-${r.id}`)?.checked);
   if (checkedRings.length) parts.push(`Rings: ${checkedRings.map(r => r.label).join(', ')}`);
   const ownedTrinkets = TRINKET_FAMILIES
@@ -574,10 +577,10 @@ async function calculate() {
   }
 
   const quantity    = parseFloat(document.getElementById('quantity').value) || 100;
-  const rodPower    = (parseFloat(document.getElementById('rod-power').value)    || 1) * critMultiplier('rod');
-  const pickPower   = (parseFloat(document.getElementById('pick-power').value)   || 1) * critMultiplier('pick');
-  const axePower    = (parseFloat(document.getElementById('axe-power').value)    || 1) * critMultiplier('axe');
-  const hammerPower = (parseFloat(document.getElementById('hammer-power').value) || 1) * critMultiplier('hammer');
+  const toolParams  = TOOLS.map(t => {
+    const power = (parseFloat(document.getElementById(`${t.key}-power`).value) || 1) * critMultiplier(t.key);
+    return `&${t.key}_power=${power}`;
+  }).join('');
   const speedPct    = parseFloat(document.getElementById('gather-speed').value) || 0;
   const craftPct    = parseFloat(document.getElementById('craft-speed').value)  || 0;
   const gatherSpeed = 1.0 + speedPct / 100;
@@ -585,10 +588,7 @@ async function calculate() {
 
   const url = `/api/chain_calc?item_id=${encodeURIComponent(selectedItemId)}`
     + `&quantity=${quantity}`
-    + `&rod_power=${rodPower}`
-    + `&pick_power=${pickPower}`
-    + `&axe_power=${axePower}`
-    + `&hammer_power=${hammerPower}`
+    + toolParams
     + `&gather_speed=${gatherSpeed}`
     + `&craft_speed=${craftSpeed}`;
 

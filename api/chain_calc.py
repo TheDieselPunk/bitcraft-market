@@ -1,5 +1,7 @@
 """
-GET /api/chain_calc?item_id=X&quantity=Y&rod_power=Z&gather_speed=W&craft_speed=V&pick_power=A&axe_power=B[&market=0]
+GET /api/chain_calc?item_id=X&quantity=Y&gather_speed=W&craft_speed=V&rod_power=Z&pick_power=A&...[&market=0]
+
+Each profession tool takes a <tool>_power param (see TOOL_PARAM_MAP); missing ones default to 1.
 
 Returns all extraction/cargo-chain methods for producing a given item, with
 stamina, time and cast/action breakdowns per method, plus each method's
@@ -24,12 +26,22 @@ from _market import (SALES_WINDOWS, all_recent_sales, order_books,
                      sell_capped, sell_instant, sell_listed)
 
 
-# tool_type int -> param name
+# tool_type int (tool_type_desc.json) -> param name, one per profession tool
 TOOL_PARAM_MAP = {
-    10: 'rod_power',
-    4:  'pick_power',
-    1:  'axe_power',
-    5:  'hammer_power',
+    1:  'axe_power',       # Forestry
+    2:  'saw_power',       # Carpentry
+    3:  'chisel_power',    # Masonry
+    4:  'pick_power',      # Mining
+    5:  'hammer_power',    # Smithing
+    6:  'knife_power',     # Leatherworking
+    7:  'bow_power',       # Hunting
+    8:  'scissors_power',  # Tailoring
+    9:  'hoe_power',       # Farming
+    10: 'rod_power',       # Fishing
+    11: 'pot_power',       # Cooking
+    12: 'machete_power',   # Foraging
+    13: 'quill_power',     # Scholar
+    14: 'mallet_power',    # Construction
 }
 
 # Fishing node resource_id patterns -> human label
@@ -825,10 +837,7 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             quantity      = float(_p('quantity', '1'))
-            rod_power     = float(_p('rod_power',    '1'))
-            pick_power    = float(_p('pick_power',   '1'))
-            axe_power     = float(_p('axe_power',    '1'))
-            hammer_power  = float(_p('hammer_power', '1'))
+            tool_powers   = {tt: float(_p(param, '1')) for tt, param in TOOL_PARAM_MAP.items()}
             gather_speed  = float(_p('gather_speed', '1.0'))
             craft_speed   = float(_p('craft_speed',  '1.0'))
             if gather_speed <= 0:
@@ -840,13 +849,6 @@ class handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._send(400, {'error': f'Invalid numeric parameter: {exc}'})
             return
-
-        tool_powers = {
-            10: rod_power,
-            4:  pick_power,
-            1:  axe_power,
-            5:  hammer_power,
-        }
 
         try:
             game_data = load_game_data()
