@@ -9,6 +9,8 @@ products (target + processing co-products) valued at live BitJita prices.
 
 gather_speed  multiplier applied to fishing/extraction time (e.g. 1.05 = +5%)
 craft_speed   multiplier applied to crafting/processing time (separate stat)
+sailing_level, ship_speed (Ocean, raw units/s), sail_region (id, blank = fastest)
+              add a sailing cargo run when a box can hold the item
 """
 
 import json
@@ -20,7 +22,7 @@ from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 sys.path.insert(0, os.path.dirname(__file__))
-from _lib import load_game_data, load_recipes_cache, cors_headers
+from _lib import load_game_data, load_recipes_cache, load_sailing_data, cors_headers
 from _effort_calc import activation_yield
 from _market import (SALES_WINDOWS, all_recent_sales, order_books,
                      sell_capped, sell_instant, sell_listed)
@@ -457,7 +459,114 @@ def _products(table, entry, input_id, runs, item_id, quantity, game_data):
     return {out_id: qty * runs for out_id, qty in per_run.items()}
 
 
-def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_speed, game_data, recipes):
+def resolve_sailing_method(item_id, quantity, sailing, gather_speed, craft_speed, recipes, game_data):
+    """
+    Sailing cargo run (Method S): sail nearest-node-first between Lost Wreckage /
+    Shipment / Treasure, open each for one box, then unpack the boxes.
+
+    sailing = {'level': Sailing level, 'ship_speed': Ocean speed (raw units/s),
+               'region': region id, or '' for whichever region is fastest}.
+    The run takes every node type the level allows, in the share it has on the
+    region's route (sailing_cargo.json), and every box picked up is unpacked, so
+    all their contents are products. Wanting the boxes themselves skips unpacking.
+    """
+    data = load_sailing_data()
+    if not data or not sailing or sailing['ship_speed'] <= 0:
+        return None
+    sid = str(item_id)
+    types = {t['key']: t for t in data['node_types']}
+    want_boxes = any(t['box_item_id'] == sid for t in types.values())
+
+    best = None
+    for rid, region in data['regions'].items():
+        if sailing['region'] and rid != sailing['region']:
+            continue
+        brackets = [b for b in region['brackets'] if b['min_level'] <= sailing['level']]
+        if not brackets:
+            continue
+        route = brackets[-1]
+        share = route['share']
+        if want_boxes:
+            per_node = share.get(next(k for k, t in types.items() if t['box_item_id'] == sid), 0)
+        else:
+            per_node = sum(s * types[k]['unpack']['outputs'].get(sid, 0) for k, s in share.items())
+        if per_node <= 0:
+            continue
+
+        nodes      = quantity / per_node
+        boxes      = {k: nodes * s for k, s in share.items()}
+        sail_time  = nodes * route['avg_hop'] / sailing['ship_speed']
+        open_time  = sum(n * types[k]['open_time'] for k, n in boxes.items()) / gather_speed
+        open_stam  = sum(n * types[k]['open_stamina'] for k, n in boxes.items())
+        if want_boxes:
+            unpack_actions = unpack_time = unpack_stam = 0.0
+            products = {types[k]['box_item_id']: n for k, n in boxes.items()}
+        else:
+            unpack_actions = sum(n * types[k]['unpack']['actions'] for k, n in boxes.items())
+            unpack_time = sum(n * types[k]['unpack']['actions'] * types[k]['unpack']['time_per_action']
+                              for k, n in boxes.items()) / craft_speed
+            unpack_stam = sum(n * types[k]['unpack']['actions'] * types[k]['unpack']['stamina_per_action']
+                              for k, n in boxes.items())
+            products = {}
+            for k, n in boxes.items():
+                for out_id, qty in types[k]['unpack']['outputs'].items():
+                    products[out_id] = products.get(out_id, 0) + n * qty
+
+        total_time = sail_time + open_time + unpack_time
+        if best and best['total_time_seconds'] <= total_time:
+            continue
+
+        mix   = ', '.join(f"{types[k]['name']} {s:.0%}" for k, s in share.items())
+        label = f"{region['name']} (R{rid})"
+        steps = [
+            {
+                'type':     'sail',
+                'label':    f"Sail to {nodes:,.0f} nodes in {label}, "
+                            f"{route['avg_hop'] / 3:.0f} tiles apart on average ({mix})",
+                'qty_out':  nodes,
+                'qty_label': 'nodes',
+                'stamina':  0.0,
+                'time_sec': sail_time,
+            },
+            {
+                'type':     'extract',
+                'label':    'Open ' + ', '.join(f"{n:,.0f} {types[k]['name']}" for k, n in boxes.items()),
+                'qty_out':  nodes,
+                'qty_label': 'boxes',
+                'casts':    nodes,
+                'stamina':  open_stam,
+                'time_sec': open_time,
+            },
+        ]
+        if not want_boxes:
+            steps.append({
+                'type':     'process',
+                'label':    f'Unpack {nodes:,.0f} boxes',
+                'qty_out':  quantity,
+                'qty_label': item_name(sid, recipes, game_data),
+                'actions':  unpack_actions,
+                'stamina':  unpack_stam,
+                'time_sec': unpack_time,
+            })
+        best = {
+            'method_name':          f"Sailing cargo — {label} → {item_name(sid, recipes, game_data)}",
+            'source_node':          None,
+            'node_label':           label,
+            'fish_name':            None,
+            'steps':                steps,
+            'total_stamina':        open_stam + unpack_stam,
+            'total_time_seconds':   total_time,
+            'total_casts':          nodes,
+            'total_actions':        unpack_actions,
+            'items_per_full_node':  None,
+            'external_ingredients': {},
+            'products':             products,
+        }
+    return best
+
+
+def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_speed, game_data, recipes,
+                        sailing=None):
     """
     Return a list of method dicts for producing `quantity` of `item_id`.
 
@@ -705,8 +814,12 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
 
     # ── Method D: Multi-step crafting chain (e.g. ingots) ─────────────────────
     # Triggers for items reachable via item-to-item crafting but not by A/B/C.
+    # Items that only come out of sailing boxes get Method S instead.
     i2i = game_data.get('item_to_item_crafting', {})
-    if sid in i2i and sid not in ebi and sid not in cbi and sid not in icbi:
+    box_ids = {t['box_item_id'] for t in (load_sailing_data() or {}).get('node_types', [])}
+    craftable = [e for e in i2i.get(sid, [])
+                 if not any(c['item_id'] in box_ids for c in e.get('consumed', []))]
+    if craftable and sid not in ebi and sid not in cbi and sid not in icbi:
         result = resolve_item_crafting_chain(
             sid, quantity, tool_powers, gather_speed, craft_speed, game_data, recipes
         )
@@ -729,6 +842,11 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'external_ingredients': external,
                 'products':            {sid: quantity},
             })
+
+    # ── Method S: Sailing cargo boxes ─────────────────────────────────────────
+    sail = resolve_sailing_method(sid, quantity, sailing, gather_speed, craft_speed, recipes, game_data)
+    if sail:
+        methods.append(sail)
 
     return methods
 
@@ -838,6 +956,9 @@ class handler(BaseHTTPRequestHandler):
         try:
             quantity      = float(_p('quantity', '1'))
             tool_powers   = {tt: float(_p(param, '1')) for tt, param in TOOL_PARAM_MAP.items()}
+            sailing       = {'level':      int(float(_p('sailing_level', '0'))),
+                             'ship_speed': float(_p('ship_speed', '0')),
+                             'region':     _p('sail_region', '')}
             gather_speed  = float(_p('gather_speed', '1.0'))
             craft_speed   = float(_p('craft_speed',  '1.0'))
             if gather_speed <= 0:
@@ -861,7 +982,8 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             methods = resolve_all_methods(
-                item_id_raw, quantity, tool_powers, gather_speed, craft_speed, game_data, recipes
+                item_id_raw, quantity, tool_powers, gather_speed, craft_speed, game_data, recipes,
+                sailing
             )
         except Exception as exc:
             self._send(500, {'error': f'Calculation error: {exc}'})

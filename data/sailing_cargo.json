@@ -1,0 +1,509 @@
+{
+ "__meta__": {
+  "built": "2026-11-02T14:33:01Z",
+  "units": "raw world units; game E/N = raw / 3; speeds in raw units/s"
+ },
+ "node_types": [
+  {
+   "key": "wreckage",
+   "resource_id": 1477126404,
+   "name": "Lost Wreckage",
+   "sailing_level": 1,
+   "open_time": 5.0,
+   "open_stamina": 0.75,
+   "box_item_id": "831574223",
+   "unpack": {
+    "recipe_id": 1309265947,
+    "actions": 5,
+    "time_per_action": 1.5,
+    "stamina_per_action": 0.75,
+    "outputs": {
+     "977394080": 0.2,
+     "1737545434": 0.2,
+     "2104542757": 0.2,
+     "1620918354": 0.2,
+     "448297337": 0.1,
+     "1303231672": 0.1,
+     "1741714930": 0.1,
+     "406404931": 0.1,
+     "1078819277": 0.05,
+     "1900727839": 0.05,
+     "1588670055": 0.05,
+     "960656047": 0.04,
+     "1002478629": 0.01
+    }
+   }
+  },
+  {
+   "key": "shipment",
+   "resource_id": 1043012047,
+   "name": "Lost Shipment",
+   "sailing_level": 20,
+   "open_time": 5.0,
+   "open_stamina": 0.89,
+   "box_item_id": "1426801907",
+   "unpack": {
+    "recipe_id": 842296762,
+    "actions": 5,
+    "time_per_action": 1.5,
+    "stamina_per_action": 1.03,
+    "outputs": {
+     "448297337": 0.15,
+     "977394080": 0.05,
+     "1303231672": 0.15,
+     "1737545434": 0.05,
+     "1741714930": 0.15,
+     "2104542757": 0.05,
+     "406404931": 0.15,
+     "1620918354": 0.05,
+     "1078819277": 0.15,
+     "1900727839": 0.15,
+     "1588670055": 0.15,
+     "960656047": 0.15,
+     "512761413": 0.05,
+     "1527154287": 0.05,
+     "715765696": 0.05,
+     "1368603262": 0.05,
+     "278830939": 0.005
+    }
+   }
+  },
+  {
+   "key": "treasure",
+   "resource_id": 1293969473,
+   "name": "Lost Treasure",
+   "sailing_level": 50,
+   "open_time": 5.0,
+   "open_stamina": 1.28,
+   "box_item_id": "1977815797",
+   "unpack": {
+    "recipe_id": 554159352,
+    "actions": 5,
+    "time_per_action": 1.5,
+    "stamina_per_action": 1.28,
+    "outputs": {
+     "1303231672": 0.175,
+     "1078819277": 0.05,
+     "1741714930": 0.175,
+     "1900727839": 0.05,
+     "406404931": 0.175,
+     "1588670055": 0.05,
+     "448297337": 0.175,
+     "960656047": 0.05,
+     "512761413": 0.2,
+     "1527154287": 0.2,
+     "715765696": 0.2,
+     "1368603262": 0.2,
+     "615302519": 0.004
+    }
+   }
+  }
+ ],
+ "ships": [
+  {
+   "collectible_id": "132",
+   "name": "Fisherman's Boat",
+   "ocean_speed": 30.0
+  },
+  {
+   "collectible_id": "573176507",
+   "name": "Clipper (III)",
+   "ocean_speed": 27.0
+  },
+  {
+   "collectible_id": "1438268605",
+   "name": "Clipper (II)",
+   "ocean_speed": 26.0
+  },
+  {
+   "collectible_id": "1142862651",
+   "name": "Clipper (I)",
+   "ocean_speed": 23.0
+  },
+  {
+   "collectible_id": "1819824069",
+   "name": "Ship (I)",
+   "ocean_speed": 22.0
+  },
+  {
+   "collectible_id": "700235689",
+   "name": "Ship (Cargo)",
+   "ocean_speed": 20.0
+  },
+  {
+   "collectible_id": "1564069891",
+   "name": "Ship (Fishing)",
+   "ocean_speed": 20.0
+  },
+  {
+   "collectible_id": "1837107818",
+   "name": "Skiff (II)",
+   "ocean_speed": 20.0
+  },
+  {
+   "collectible_id": "1649953465",
+   "name": "Skiff (III)",
+   "ocean_speed": 20.0
+  },
+  {
+   "collectible_id": "320414617",
+   "name": "Skiff (IV)",
+   "ocean_speed": 20.0
+  },
+  {
+   "collectible_id": "131",
+   "name": "Skiff (I)",
+   "ocean_speed": 17.0
+  },
+  {
+   "collectible_id": "757232266",
+   "name": "Raft (III)",
+   "ocean_speed": 14.0
+  },
+  {
+   "collectible_id": "2098202704",
+   "name": "Raft (II)",
+   "ocean_speed": 13.0
+  },
+  {
+   "collectible_id": "130",
+   "name": "Raft (I)",
+   "ocean_speed": 12.0
+  }
+ ],
+ "regions": {
+  "7": {
+   "name": "Virexal",
+   "counts": {
+    "wreckage": 1865,
+    "shipment": 726,
+    "treasure": 232
+   },
+   "brackets": [
+    {
+     "min_level": 1,
+     "nodes": 1865,
+     "avg_hop": 59.4,
+     "share": {
+      "wreckage": 1.0
+     }
+    },
+    {
+     "min_level": 20,
+     "nodes": 2591,
+     "avg_hop": 47.7,
+     "share": {
+      "wreckage": 0.7198,
+      "shipment": 0.2802
+     }
+    },
+    {
+     "min_level": 50,
+     "nodes": 2823,
+     "avg_hop": 45.0,
+     "share": {
+      "wreckage": 0.6606,
+      "shipment": 0.2572,
+      "treasure": 0.0822
+     }
+    }
+   ]
+  },
+  "8": {
+   "name": "Solmere",
+   "counts": {
+    "wreckage": 1891,
+    "shipment": 719,
+    "treasure": 252
+   },
+   "brackets": [
+    {
+     "min_level": 1,
+     "nodes": 1891,
+     "avg_hop": 56.4,
+     "share": {
+      "wreckage": 1.0
+     }
+    },
+    {
+     "min_level": 20,
+     "nodes": 2610,
+     "avg_hop": 47.1,
+     "share": {
+      "wreckage": 0.7245,
+      "shipment": 0.2755
+     }
+    },
+    {
+     "min_level": 50,
+     "nodes": 2862,
+     "avg_hop": 47.3,
+     "share": {
+      "wreckage": 0.6607,
+      "shipment": 0.2512,
+      "treasure": 0.0881
+     }
+    }
+   ]
+  },
+  "9": {
+   "name": "Marowik",
+   "counts": {
+    "wreckage": 2288,
+    "shipment": 849,
+    "treasure": 303
+   },
+   "brackets": [
+    {
+     "min_level": 1,
+     "nodes": 2288,
+     "avg_hop": 55.7,
+     "share": {
+      "wreckage": 1.0
+     }
+    },
+    {
+     "min_level": 20,
+     "nodes": 3137,
+     "avg_hop": 48.3,
+     "share": {
+      "wreckage": 0.7294,
+      "shipment": 0.2706
+     }
+    },
+    {
+     "min_level": 50,
+     "nodes": 3440,
+     "avg_hop": 46.9,
+     "share": {
+      "wreckage": 0.6651,
+      "shipment": 0.2468,
+      "treasure": 0.0881
+     }
+    }
+   ]
+  },
+  "12": {
+   "name": "Elyndor",
+   "counts": {
+    "wreckage": 1617,
+    "shipment": 636,
+    "treasure": 197
+   },
+   "brackets": [
+    {
+     "min_level": 1,
+     "nodes": 1617,
+     "avg_hop": 62.3,
+     "share": {
+      "wreckage": 1.0
+     }
+    },
+    {
+     "min_level": 20,
+     "nodes": 2253,
+     "avg_hop": 46.1,
+     "share": {
+      "wreckage": 0.7177,
+      "shipment": 0.2823
+     }
+    },
+    {
+     "min_level": 50,
+     "nodes": 2450,
+     "avg_hop": 44.3,
+     "share": {
+      "wreckage": 0.66,
+      "shipment": 0.2596,
+      "treasure": 0.0804
+     }
+    }
+   ]
+  },
+  "13": {
+   "name": "Hexalis",
+   "counts": {
+    "wreckage": 2675,
+    "shipment": 1007,
+    "treasure": 356
+   },
+   "brackets": [
+    {
+     "min_level": 1,
+     "nodes": 2675,
+     "avg_hop": 58.6,
+     "share": {
+      "wreckage": 1.0
+     }
+    },
+    {
+     "min_level": 20,
+     "nodes": 3682,
+     "avg_hop": 56.2,
+     "share": {
+      "wreckage": 0.7265,
+      "shipment": 0.2735
+     }
+    },
+    {
+     "min_level": 50,
+     "nodes": 4038,
+     "avg_hop": 51.6,
+     "share": {
+      "wreckage": 0.6625,
+      "shipment": 0.2494,
+      "treasure": 0.0882
+     }
+    }
+   ]
+  },
+  "14": {
+   "name": "Lumethis",
+   "counts": {
+    "wreckage": 1941,
+    "shipment": 815,
+    "treasure": 252
+   },
+   "brackets": [
+    {
+     "min_level": 1,
+     "nodes": 1941,
+     "avg_hop": 52.9,
+     "share": {
+      "wreckage": 1.0
+     }
+    },
+    {
+     "min_level": 20,
+     "nodes": 2756,
+     "avg_hop": 40.6,
+     "share": {
+      "wreckage": 0.7043,
+      "shipment": 0.2957
+     }
+    },
+    {
+     "min_level": 50,
+     "nodes": 3008,
+     "avg_hop": 47.3,
+     "share": {
+      "wreckage": 0.6453,
+      "shipment": 0.2709,
+      "treasure": 0.0838
+     }
+    }
+   ]
+  },
+  "17": {
+   "name": "Draxen",
+   "counts": {
+    "wreckage": 1761,
+    "shipment": 619,
+    "treasure": 231
+   },
+   "brackets": [
+    {
+     "min_level": 1,
+     "nodes": 1761,
+     "avg_hop": 52.1,
+     "share": {
+      "wreckage": 1.0
+     }
+    },
+    {
+     "min_level": 20,
+     "nodes": 2380,
+     "avg_hop": 51.0,
+     "share": {
+      "wreckage": 0.7399,
+      "shipment": 0.2601
+     }
+    },
+    {
+     "min_level": 50,
+     "nodes": 2611,
+     "avg_hop": 47.5,
+     "share": {
+      "wreckage": 0.6745,
+      "shipment": 0.2371,
+      "treasure": 0.0885
+     }
+    }
+   ]
+  },
+  "18": {
+   "name": "Oryxen",
+   "counts": {
+    "wreckage": 1464,
+    "shipment": 524,
+    "treasure": 189
+   },
+   "brackets": [
+    {
+     "min_level": 1,
+     "nodes": 1464,
+     "avg_hop": 49.5,
+     "share": {
+      "wreckage": 1.0
+     }
+    },
+    {
+     "min_level": 20,
+     "nodes": 1988,
+     "avg_hop": 50.6,
+     "share": {
+      "wreckage": 0.7364,
+      "shipment": 0.2636
+     }
+    },
+    {
+     "min_level": 50,
+     "nodes": 2177,
+     "avg_hop": 46.2,
+     "share": {
+      "wreckage": 0.6725,
+      "shipment": 0.2407,
+      "treasure": 0.0868
+     }
+    }
+   ]
+  },
+  "19": {
+   "name": "Zephra",
+   "counts": {
+    "wreckage": 1748,
+    "shipment": 701,
+    "treasure": 248
+   },
+   "brackets": [
+    {
+     "min_level": 1,
+     "nodes": 1748,
+     "avg_hop": 66.7,
+     "share": {
+      "wreckage": 1.0
+     }
+    },
+    {
+     "min_level": 20,
+     "nodes": 2449,
+     "avg_hop": 56.2,
+     "share": {
+      "wreckage": 0.7138,
+      "shipment": 0.2862
+     }
+    },
+    {
+     "min_level": 50,
+     "nodes": 2697,
+     "avg_hop": 45.3,
+     "share": {
+      "wreckage": 0.6481,
+      "shipment": 0.2599,
+      "treasure": 0.092
+     }
+    }
+   ]
+  }
+ }
+}

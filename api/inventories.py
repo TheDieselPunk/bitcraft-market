@@ -1,7 +1,8 @@
 """
-GET /api/inventories?player_id=<id>
+GET /api/inventories?player_id=<id>[&vault=1]
 
-Returns raw inventories (all bags) and item lookup for a player.
+Returns raw inventories (all bags) and item lookup for a player; vault=1 adds the
+ids of their collectibles (ships are deployed from these).
 Used by Equipment Simulator to detect worn gear.
 """
 
@@ -30,11 +31,16 @@ class handler(BaseHTTPRequestHandler):
         try:
             data = api_get(f'/api/players/{player_id}/inventories')
             eq_data = api_get(f'/api/players/{player_id}/equipment')
-            self._send(200, {
+            body = {
                 'items':       data.get('items', {}),
                 'inventories': data.get('inventories', []),
                 'equipment':   eq_data.get('equipment', []),
-            })
+            }
+            # ?vault=1: collectible ids the player owns (ships are deployed from these)
+            if params.get('vault', [''])[0] == '1':
+                vault = api_get(f'/api/players/{player_id}/vault')
+                body['collectibles'] = [str(c['id']) for c in vault.get('collectibles', [])]
+            self._send(200, body)
         except Exception as e:
             self._send(500, {'error': str(e)})
 

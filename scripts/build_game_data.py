@@ -484,7 +484,11 @@ UNFARMABLE_RESOURCE_TAGS = {
     'Dungeon Resource', 'Profession Dungeon Resource',
     'Uncharted Resource', 'Uncharted Scholar', 'Uncharted Tailoring Resource',
 }
-SKIPPED_RESOURCE_TAGS = REMOVED_RESOURCE_TAGS | UNFARMABLE_RESOURCE_TAGS
+
+# Sailing cargo is farmed by sailing node to node for one box each, not by standing
+# at a node; the Chain Calculator models it from sailing_cargo.json instead.
+SAILING_CARGO_TAGS = {'Sailing Cargo'}
+SKIPPED_RESOURCE_TAGS = REMOVED_RESOURCE_TAGS | UNFARMABLE_RESOURCE_TAGS | SAILING_CARGO_TAGS
 
 
 def build_node_activation(extraction_list, resource_list, item_by_id):

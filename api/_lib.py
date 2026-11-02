@@ -16,6 +16,7 @@ HEADERS = {
 # Path to pre-built recipe cache (populated by GitHub Actions)
 RECIPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'recipes.json')
 GAME_DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'game_data.json')
+SAILING_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'sailing_cargo.json')
 
 SKILL_NAMES = {
     1: 'ANY',            2: 'Forestry',      3: 'Carpentry',   4: 'Masonry',
@@ -42,6 +43,15 @@ def api_get(path, params=None):
     req = urllib.request.Request(url, headers=HEADERS)
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read())
+
+
+def load_sailing_data():
+    """Load the sailing cargo snapshot (node types, ships, per-region routes). None if missing."""
+    try:
+        with open(SAILING_PATH) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
 
 
 def load_recipes_cache():

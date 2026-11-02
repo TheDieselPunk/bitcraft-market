@@ -26,10 +26,16 @@ jobs:
       - name: Build equipment data cache
         run: python scripts/build_equipment_data.py
 
+      # Live node positions from the BitJita relay (keeps the last snapshot if it's down)
+      - name: Build sailing cargo snapshot
+        run: |
+          pip install websocket-client numpy
+          python scripts/build_sailing_cargo.py
+
       - name: Commit updated data files
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/game_data.json data/recipes.json data/equipment_data.json
+          git add data/game_data.json data/recipes.json data/equipment_data.json data/sailing_cargo.json
           git diff --cached --quiet || git commit -m "chore: refresh data cache [skip ci]"
           git push

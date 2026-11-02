@@ -270,6 +270,26 @@
       </div>
     </div>
 
+    <!-- Sailing Cargo -->
+    <div class="card">
+      <div class="card-title">Sailing Cargo</div>
+      <div class="ring-subtitle">Boxes from Lost Wreckage (Sailing 1), Shipment (20) and Treasure (50), one per node, sailing nearest-first at the ship's ocean speed.</div>
+      <div class="field">
+        <label for="ship-select">Ship</label>
+        <select id="ship-select"></select>
+      </div>
+      <div class="two-col" style="gap:8px;margin-bottom:0">
+        <div class="field" style="margin:0">
+          <label for="sailing-level">Sailing Level</label>
+          <input type="number" id="sailing-level" value="1" min="1" max="120" step="1" />
+        </div>
+        <div class="field" style="margin:0">
+          <label for="sail-region">Region</label>
+          <select id="sail-region"><option value="">Fastest</option></select>
+        </div>
+      </div>
+    </div>
+
     <!-- Rings & Trinkets -->
     <div class="card">
       <div class="card-title">Rings &amp; Trinkets</div>
@@ -504,17 +524,19 @@ async function autofillPlayer() {
     const data = await res.json();
     if (!res.ok || data.error) { status.textContent = data.error || 'Player not found.'; return; }
 
-    const invRes  = await fetch(`/api/inventories?player_id=${data.player_id}`);
-    const invData = await invRes.json();
-    await ringsReady;
+    const [invData, skillData] = await Promise.all([
+      fetch(`/api/inventories?player_id=${data.player_id}&vault=1`).then(r => r.json()),
+      fetch(`/api/skill_planner?player_id=${data.player_id}`).then(r => r.json()).catch(() => ({})),
+    ]);
+    await Promise.all([ringsReady, sailingReady]);
     status.textContent = `Loaded: ${data.username}`;
-    applyToolbelt(invData);  // replaces the status with a tools/rings/trinkets summary
+    applyToolbelt(invData, applySailing(invData.collectibles, skillData.skills));  // replaces the status with a summary
   } catch (e) {
     status.textContent = `Error: ${e.message}`;
   }
 }
 
-function applyToolbelt(data) {
+function applyToolbelt(data, extraParts = []) {
   const items = data.items || {};
   const inventories = data.inventories || [];
 
@@ -566,7 +588,48 @@ function applyToolbelt(data) {
     .filter(([, t]) => t)
     .map(([f, t]) => `${f.label} ${t.rank}`);
   if (ownedTrinkets.length) parts.push(`Trinkets: ${ownedTrinkets.join(', ')}`);
+  parts.push(...extraParts);
   if (parts.length) status.textContent = parts.join(' · ');
+}
+
+// ── Sailing cargo ────────────────────────────────────────────────────────────
+// data/sailing_cargo.json: ships (fastest ocean speed first), regions, node types.
+let SAILING = null;
+
+async function initSailing() {
+  try {
+    SAILING = await (await fetch('/data/sailing_cargo.json')).json();
+  } catch { return; }  // no snapshot: the API skips sailing routes too
+  const shipSel = document.getElementById('ship-select');
+  shipSel.innerHTML = SAILING.ships.map(s =>
+    `<option value="${s.collectible_id}">${escHtml(s.name)} — ocean speed ${s.ocean_speed}</option>`).join('');
+  shipSel.value = SAILING.ships.find(s => s.name === 'Raft (I)')?.collectible_id ?? shipSel.value;
+  document.getElementById('sail-region').innerHTML = '<option value="">Fastest</option>' +
+    Object.entries(SAILING.regions)
+      .map(([id, r]) => `<option value="${id}">${escHtml(r.name)} (R${id})</option>`).join('');
+}
+
+function shipSpeed() {
+  const id = document.getElementById('ship-select').value;
+  return SAILING?.ships.find(s => s.collectible_id === id)?.ocean_speed || 0;
+}
+
+// Fill Sailing level and the fastest ship the player owns; returns status parts.
+function applySailing(collectibles, skills) {
+  if (!SAILING) return [];
+  const parts = [];
+  const level = (skills || []).find(s => s.skill_id === 21)?.current_level;
+  if (level) {
+    document.getElementById('sailing-level').value = level;
+    parts.push(`Sailing ${level}`);
+  }
+  const owned = new Set(collectibles || []);
+  const ship  = SAILING.ships.find(s => owned.has(s.collectible_id));
+  if (ship) {
+    document.getElementById('ship-select').value = ship.collectible_id;
+    parts.push(ship.name);
+  }
+  return parts;
 }
 
 // ── Calculate ────────────────────────────────────────────────────────────────
@@ -589,6 +652,9 @@ async function calculate() {
   const url = `/api/chain_calc?item_id=${encodeURIComponent(selectedItemId)}`
     + `&quantity=${quantity}`
     + toolParams
+    + `&sailing_level=${parseInt(document.getElementById('sailing-level').value) || 1}`
+    + `&ship_speed=${shipSpeed()}`
+    + `&sail_region=${document.getElementById('sail-region').value}`
     + `&gather_speed=${gatherSpeed}`
     + `&craft_speed=${craftSpeed}`;
 
@@ -747,6 +813,7 @@ function renderResults(data) {
       fish:       '🎣 Fish',
       process:    '⚙️ Process',
       extract:    '⛏️ Extract',
+      sail:       '⛵ Sail',
     };
 
     let lastGroup = null;
@@ -919,6 +986,7 @@ function fmtTime(sec) {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 const ringsReady = initRings();
+const sailingReady = initSailing();
 initEquipSets();
 
 // ── Equipment Sets ────────────────────────────────────────────────────────────
