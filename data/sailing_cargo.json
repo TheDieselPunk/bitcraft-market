@@ -1,6 +1,6 @@
 {
  "__meta__": {
-  "built": "2026-11-02T14:33:01Z",
+  "built": "2026-11-02T14:41:43Z",
   "units": "raw world units; game E/N = raw / 3; speeds in raw units/s"
  },
  "node_types": [
@@ -212,35 +212,35 @@
   "8": {
    "name": "Solmere",
    "counts": {
-    "wreckage": 1891,
+    "wreckage": 1890,
     "shipment": 719,
     "treasure": 252
    },
    "brackets": [
     {
      "min_level": 1,
-     "nodes": 1891,
-     "avg_hop": 56.4,
+     "nodes": 1890,
+     "avg_hop": 55.1,
      "share": {
       "wreckage": 1.0
      }
     },
     {
      "min_level": 20,
-     "nodes": 2610,
-     "avg_hop": 47.1,
+     "nodes": 2609,
+     "avg_hop": 49.2,
      "share": {
-      "wreckage": 0.7245,
-      "shipment": 0.2755
+      "wreckage": 0.7244,
+      "shipment": 0.2756
      }
     },
     {
      "min_level": 50,
-     "nodes": 2862,
-     "avg_hop": 47.3,
+     "nodes": 2861,
+     "avg_hop": 48.5,
      "share": {
-      "wreckage": 0.6607,
-      "shipment": 0.2512,
+      "wreckage": 0.6606,
+      "shipment": 0.2513,
       "treasure": 0.0881
      }
     }
@@ -368,7 +368,7 @@
     {
      "min_level": 1,
      "nodes": 1941,
-     "avg_hop": 52.9,
+     "avg_hop": 49.8,
      "share": {
       "wreckage": 1.0
      }
@@ -376,7 +376,7 @@
     {
      "min_level": 20,
      "nodes": 2756,
-     "avg_hop": 40.6,
+     "avg_hop": 42.8,
      "share": {
       "wreckage": 0.7043,
       "shipment": 0.2957
@@ -385,7 +385,7 @@
     {
      "min_level": 50,
      "nodes": 3008,
-     "avg_hop": 47.3,
+     "avg_hop": 46.2,
      "share": {
       "wreckage": 0.6453,
       "shipment": 0.2709,
