@@ -490,6 +490,60 @@ UNFARMABLE_RESOURCE_TAGS = {
 SAILING_CARGO_TAGS = {'Sailing Cargo'}
 SKIPPED_RESOURCE_TAGS = REMOVED_RESOURCE_TAGS | UNFARMABLE_RESOURCE_TAGS | SAILING_CARGO_TAGS
 
+# Live node counts per resource from the BitJita relay (build_live_nodes.py). Nodes
+# with fewer than MIN_LIVE_NODES in every mainland region aren't standing world nodes:
+# they come from buildings, growth stages or events, or only grow on the islands.
+LIVE_NODES_FILE = OUT_FILE.parent / 'live_nodes.json'
+MIN_LIVE_NODES = 5
+
+
+def prospected_resource_ids(prospecting_list, clump_list, resource_list):
+    """
+    Nodes that only appear once a player prospects for them (Rich ore deposits, Ancient
+    Debris, Berserker Mushrooms, Hidden fish spots, ...), plus what they turn into once
+    used: a smoked Beehive's Enraged Drone Nest, a baited Hidden Spot's Baited Spot.
+    """
+    clumps = build_lookup(clump_list)
+    found = {rid for p in prospecting_list
+             for rid in clumps.get(p.get('resource_clump_id'), {}).get('resource_id', [])}
+    by_id = build_lookup(resource_list)
+    return found | ({by_id[rid].get('on_destroy_yield_resource_id') for rid in found if rid in by_id} - {0})
+
+
+def searched_fishing_spot_ids(extraction_list, resource_list, prospected):
+    """
+    Prospected fishing spots you bait to fish (Hidden X Spot) and the spots they become
+    (Baited X Spot). Searching for one is part of ordinary fishing: once baited it's ready
+    like a baited Dormant School or a chummed ocean School, so these stay sources. They
+    only stand in the world once someone has searched, so the live check skips them.
+    """
+    spots = set()
+    for target, activation in build_node_activation(extraction_list, resource_list, {}).items():
+        source = int(activation['source_resource_id'])
+        if source in prospected:
+            spots |= {source, int(target)}
+    return spots
+
+
+def absent_resource_ids():
+    """Resources the live snapshot found standing in no mainland region (none if there's no snapshot)."""
+    try:
+        live = json.loads(LIVE_NODES_FILE.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return set()
+    return {int(rid) for rid, n in live.get('nodes', {}).items() if n < MIN_LIVE_NODES}
+
+
+def skipped_resources(resource_list, extraction_list, prospecting_list, clump_list):
+    """{reason: resource ids} for every node that isn't counted as a source."""
+    prospected = prospected_resource_ids(prospecting_list, clump_list, resource_list)
+    fishing = searched_fishing_spot_ids(extraction_list, resource_list, prospected)
+    return {
+        'tagged':     {r['id'] for r in resource_list if r.get('tag') in SKIPPED_RESOURCE_TAGS},
+        'prospected': prospected - fishing,
+        'not live':   absent_resource_ids() - fishing,
+    }
+
 
 def build_node_activation(extraction_list, resource_list, item_by_id):
     """
@@ -582,9 +636,12 @@ def main():
     resource_list = to_list(fetch_json('resource_desc.json'))
     print(f'  {len(resource_list)} resource nodes.')
 
-    removed = {r['id'] for r in resource_list if r.get('tag') in SKIPPED_RESOURCE_TAGS}
+    skipped = skipped_resources(resource_list, extraction_list, to_list(fetch_json('prospecting_desc.json')),
+                                to_list(fetch_json('resource_clump_desc.json')))
+    removed = set().union(*skipped.values())
     extraction_list = [r for r in extraction_list if r.get('resource_id') not in removed]
-    print(f'  Dropped {len(removed)} removed or unfarmable nodes ({", ".join(sorted(SKIPPED_RESOURCE_TAGS))}).')
+    print(f'  Dropped {len(removed)} nodes that aren\'t farmable world nodes: '
+          + ', '.join(f'{len(ids)} {reason}' for reason, ids in skipped.items()) + '.')
 
     print('Fetching crafting_recipe_desc.json ...')
     crafting_list = to_list(fetch_json('crafting_recipe_desc.json'))

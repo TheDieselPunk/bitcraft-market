@@ -17,6 +17,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install relay client
+        run: pip install websocket-client numpy
+
+      # Live node counts from the BitJita relay, read by the next two builds to drop
+      # nodes the world doesn't have (rebuilt about once a day; kept if the relay is down)
+      - name: Build live node snapshot
+        run: python scripts/build_live_nodes.py
+
       - name: Build game data cache
         run: python scripts/build_game_data.py
 
@@ -28,14 +36,12 @@ jobs:
 
       # Live node positions from the BitJita relay (keeps the last snapshot if it's down)
       - name: Build sailing cargo snapshot
-        run: |
-          pip install websocket-client numpy
-          python scripts/build_sailing_cargo.py
+        run: python scripts/build_sailing_cargo.py
 
       - name: Commit updated data files
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/game_data.json data/recipes.json data/equipment_data.json data/sailing_cargo.json
+          git add data/game_data.json data/recipes.json data/equipment_data.json data/sailing_cargo.json data/live_nodes.json
           git diff --cached --quiet || git commit -m "chore: refresh data cache [skip ci]"
           git push

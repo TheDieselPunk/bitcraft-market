@@ -29,7 +29,7 @@ import urllib.parse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from build_game_data import SKIPPED_RESOURCE_TAGS, possibility_chances
+from build_game_data import possibility_chances, skipped_resources
 
 API_BASE    = 'https://bitjita.com'
 HEADERS     = {'User-Agent': 'BitJita (Billard)', 'Accept': 'application/json'}
@@ -335,8 +335,10 @@ def build_static_indexes():
     item_list_rows = to_list(fetch_static_json('item_list_desc.json'))
     resource_rows = to_list(fetch_static_json('resource_desc.json'))
 
-    # Same node filter as game_data.json: removed and unfarmable nodes aren't sources
-    skipped = {r['id'] for r in resource_rows if r.get('tag') in SKIPPED_RESOURCE_TAGS}
+    # Same node filter as game_data.json: removed, unfarmable, prospected and not-live nodes aren't sources
+    skipped = set().union(*skipped_resources(resource_rows, extraction_rows,
+                                             to_list(fetch_static_json('prospecting_desc.json')),
+                                             to_list(fetch_static_json('resource_clump_desc.json'))).values())
     extraction_rows = [r for r in extraction_rows if r.get('resource_id') not in skipped]
 
     item_by_id = build_lookup(item_rows)
