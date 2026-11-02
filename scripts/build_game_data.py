@@ -47,6 +47,16 @@ def build_lookup(items, key='id'):
     return {entry[key]: entry for entry in items}
 
 
+def possibility_chances(item_list):
+    """(chance, possibility) for each entry of an item list. One entry is picked per
+    roll; lists whose chances total more than 1 are weights (Lost Treasure's add up
+    to ~100, legendary pies' to ~29,600), so those are scaled to sum to 1."""
+    possibilities = item_list.get('possibilities', [])
+    total = sum(p.get('probability', 1.0) for p in possibilities)
+    scale = 1 / total if total > 1 else 1
+    return [(p.get('probability', 1.0) * scale, p) for p in possibilities]
+
+
 def build_cargo_extraction(extraction_list):
     """
     Build {cargo_id_str -> [{resource_id, prob_per_hp, stamina_per_cast, ...}]}
@@ -151,8 +161,7 @@ def build_extraction_by_item(extraction_list, item_list_by_id, item_by_id):
                 # Wrapper item — resolve via item_list_desc
                 item_list = item_list_by_id.get(list_id)
                 if item_list:
-                    for possibility in item_list.get('possibilities', []):
-                        poss_prob = possibility.get('probability', 1.0)
+                    for poss_prob, possibility in possibility_chances(item_list):
                         for actual in possibility.get('items', []):
                             actual_id = str(actual.get('item_id', ''))
                             actual_qty = actual.get('quantity', 1)
@@ -258,8 +267,7 @@ def build_cargo_by_item(crafting_list, cargo_extraction, extraction_by_item,
                         # Accumulate expected output per actual item across ALL possibilities
                         # (multiple possibilities may yield the same item — sum them)
                         item_outputs = {}  # actual_id -> total expected qty per recipe run
-                        for possibility in item_list.get('possibilities', []):
-                            poss_prob = possibility.get('probability', 1.0)
+                        for poss_prob, possibility in possibility_chances(item_list):
                             for actual in possibility.get('items', []):
                                 actual_id = str(actual.get('item_id', ''))
                                 actual_qty = actual.get('quantity', 1)
@@ -357,8 +365,7 @@ def build_item_chain_by_item(crafting_list, extraction_by_item, item_list_by_id,
                     if item_list:
                         # Accumulate expected output per actual item across all possibilities
                         resolved = {}
-                        for possibility in item_list.get('possibilities', []):
-                            poss_prob = possibility.get('probability', 1.0)
+                        for poss_prob, possibility in possibility_chances(item_list):
                             for actual in possibility.get('items', []):
                                 actual_id = str(actual.get('item_id', ''))
                                 actual_qty = actual.get('quantity', 1)
@@ -439,8 +446,7 @@ def build_item_to_item_crafting(crafting_list, item_by_id, item_list_by_id, carg
                 item_list = item_list_by_id.get(list_id)
                 if item_list:
                     resolved = {}
-                    for possibility in item_list.get('possibilities', []):
-                        poss_prob = possibility.get('probability', 1.0)
+                    for poss_prob, possibility in possibility_chances(item_list):
                         for actual in possibility.get('items', []):
                             actual_id  = str(actual.get('item_id', ''))
                             actual_qty = actual.get('quantity', 1)

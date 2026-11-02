@@ -29,7 +29,7 @@ import urllib.parse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from build_game_data import SKIPPED_RESOURCE_TAGS
+from build_game_data import SKIPPED_RESOURCE_TAGS, possibility_chances
 
 API_BASE    = 'https://bitjita.com'
 HEADERS     = {'User-Agent': 'BitJita (Billard)', 'Accept': 'application/json'}
@@ -295,8 +295,7 @@ def index_item_list_possibilities(item_list_rows, item_by_id):
     indexed = {}
     for item_list in item_list_rows:
         entries = []
-        for possibility in item_list.get('possibilities', []):
-            chance = possibility.get('probability', 1)
+        for chance, possibility in possibility_chances(item_list):
             for stack in possibility.get('items', []):
                 target_id = str(stack.get('item_id', ''))
                 if not target_id:
