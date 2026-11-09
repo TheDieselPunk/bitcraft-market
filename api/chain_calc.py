@@ -14,6 +14,7 @@ sailing_level, ship_speed (Ocean, raw units/s), sail_region (id, blank = fastest
 """
 
 import json
+import math
 import re
 import sys
 import os
@@ -234,6 +235,84 @@ def compute_activation_cost(fe, items_needed, power, tool_powers, gather_speed, 
     return extra_steps, extra_stamina, extra_time, external
 
 
+def _loop_recipe(sid, recipe):
+    """Enrich (consumes its own output) or Unpack (consumes a market package)."""
+    return any(c['item_id'] == sid or c.get('item_type') == 'Cargo' and 'Unpack' in recipe.get('recipe_name', '')
+               for c in recipe.get('consumed', []))
+
+
+def _recipe_unit_time(recipe, times, tool_powers, craft_speed):
+    """Seconds per unit of recipe's output, its inputs costed from times (inf if one can't be made)."""
+    out_qty = recipe.get('output_quantity', 1)
+    if out_qty <= 0:
+        return math.inf
+    passive = recipe.get('stamina_per_action', 0) == 0 and not recipe.get('tool_requirements')
+    craft = 0.0 if passive else (recipe.get('actions_required', 1)
+                                 / _tool_power(recipe.get('tool_requirements', []), tool_powers)
+                                 * recipe.get('time_per_action', 1.6) / craft_speed)
+    return (craft + sum(c['quantity'] * times.get(str(c['item_id']), math.inf)
+                        for c in recipe.get('consumed', []))) / out_qty
+
+
+_unit_times_cache = {'key': None, 'times': {}}
+
+
+def unit_times(tool_powers, gather_speed, craft_speed, game_data):
+    """
+    {item_id: rough seconds to make one}, made the way resolve_item_crafting_chain
+    makes it (extract, else unpack cargo, else craft with the quickest recipe), so it
+    can try recipes quickest first instead of resolving every one: chains branch at
+    each level, and resolving them all takes minutes. Bait/chum isn't counted.
+    """
+    key = (id(game_data), tuple(sorted(tool_powers.items())), gather_speed, craft_speed)
+    cache = _unit_times_cache
+    if cache['key'] == key:
+        return cache['times']
+
+    i2i = game_data.get('item_to_item_crafting', {})
+    cbi = game_data.get('cargo_by_item', {})
+    ebi = game_data.get('extraction_by_item', {})
+    cex = game_data.get('cargo_extraction', {})
+
+    def gather_time(fe):
+        prob = _yield_per_cast(fe, _tool_power(fe.get('tool_requirements', []), tool_powers), game_data)
+        return fe['time_per_cast'] / gather_speed / prob if prob > 0 else None
+
+    times = {}
+    for sid in ebi:
+        direct = _item_sources(ebi, sid)
+        t = direct and gather_time(max(direct, key=lambda e: e['prob_per_hp']))
+        if t:
+            times[sid] = t
+    for sid, entries in cbi.items():
+        ce = entries[0]
+        if sid in times or ce['output_quantity'] <= 0:
+            continue
+        for fe in _cargo_sources(ebi, cex, str(ce['cargo_input_id'])):
+            t = gather_time(fe)
+            if t:
+                unpack = (ce['actions_required'] / _tool_power(ce.get('tool_requirements', []), tool_powers)
+                          * ce.get('time_per_action', 1.6) / craft_speed)
+                times[sid] = (ce.get('cargo_input_qty', 1) * t + unpack) / ce['output_quantity']
+                break
+
+    # Crafted items: relax until no recipe gets an item 0.1% quicker. Productive
+    # loops (seeds → plant → more seeds) shrink a little each pass, hence the cap.
+    crafted = [(sid, r) for sid, rs in i2i.items() if sid not in times
+               for r in rs if not _loop_recipe(sid, r)]
+    for _ in range(50):
+        changed = False
+        for sid, r in crafted:
+            t = _recipe_unit_time(r, times, tool_powers, craft_speed)
+            if t < times.get(sid, math.inf) * 0.999:
+                times[sid] = t
+                changed = True
+        if not changed:
+            break
+    cache.update(key=key, times=times)
+    return times
+
+
 def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, craft_speed,
                                game_data, recipes, visited=None, demand=None):
     """
@@ -245,6 +324,7 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
       1. Direct extraction (non-cargo ebi entry) → extract step
       2. Cargo unpack chain (cbi entry) → mine + unpack steps
       3. Item-to-item crafting (i2i) → recurse on inputs, append craft step
+         (recipes tried quickest first, by unit_times)
       None → caller treats as external ingredient
     """
     if visited is None:
@@ -352,12 +432,13 @@ def resolve_item_crafting_chain(item_id, quantity, tool_powers, gather_speed, cr
         new_visited = visited | {sid}
         new_demand  = {**(demand or {}), sid: quantity}
         # Prefer real recipes over Enrich (consumes its own output) and
-        # Unpack (consumes a market package) when both exist.
+        # Unpack (consumes a market package) when both exist, then the quickest:
+        # many items have several (Chemical Base from any tier of catalyst, or Tree Sap)
         def _is_loop(r):
-            return any(c['item_id'] == sid or c.get('item_type') == 'Cargo' and 'Unpack' in r.get('recipe_name', '')
-                       for c in r.get('consumed', []))
+            return _loop_recipe(sid, r)
+        times = unit_times(tool_powers, gather_speed, craft_speed, game_data)
         fallback = None
-        for recipe in sorted(i2i[sid], key=_is_loop):
+        for recipe in sorted(i2i[sid], key=lambda r: (_is_loop(r), _recipe_unit_time(r, times, tool_powers, craft_speed))):
             out_qty = recipe.get('output_quantity', 1)
             if out_qty <= 0:
                 continue
@@ -721,17 +802,37 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
     # e.g. lake fish (Item) → process → oil/filet/products
     for ic in icbi.get(sid, []):
         input_id = str(ic['input_item_id'])
-        oil_per_fish = ic['output_quantity']
-        if oil_per_fish <= 0:
+        out_per_run = ic['output_quantity']
+        if out_per_run <= 0:
             continue
 
-        fish_needed   = quantity / oil_per_fish
-        total_work    = fish_needed * ic['actions_required']
+        runs          = quantity / out_per_run
+        fish_needed   = runs * ic.get('input_item_qty', 1)
+        oil_per_fish  = out_per_run / ic.get('input_item_qty', 1)
+        total_work    = runs * ic['actions_required']
         proc_power    = _tool_power(ic.get('tool_requirements', []), tool_powers)
         proc_attempts = total_work / proc_power
         proc_stamina  = proc_attempts * ic.get('stamina_per_action', 0.0)
         proc_time     = proc_attempts * ic.get('time_per_action', 1.6) / craft_speed
         input_name    = ic.get('input_item_name', item_name(input_id, recipes, game_data))
+
+        # The recipe's other ingredients (vials, ink, relics, ...): crafted where a
+        # chain exists, otherwise bought
+        ing_steps, ing_stamina, ing_time, ing_external = [], 0.0, 0.0, []
+        for c in ic.get('other_consumed', []):
+            c_qty = runs * c['quantity']
+            sub = resolve_item_crafting_chain(
+                c['item_id'], c_qty, tool_powers, gather_speed, craft_speed,
+                game_data, recipes, frozenset({sid}), {sid: quantity}
+            )
+            if sub is None:
+                ing_external.append({'item_id': str(c['item_id']), 'item_name': c['item_name'], 'quantity': c_qty})
+                continue
+            sub_steps, sub_stam, sub_time, sub_ext = sub
+            ing_steps    += sub_steps
+            ing_stamina  += sub_stam
+            ing_time     += sub_time
+            ing_external += sub_ext
 
         for fe in _item_sources(ebi, input_id):
             f_tool_reqs = fe.get('tool_requirements', [])
@@ -774,8 +875,8 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
             bait_stamina += act_stamina
             bait_time    += act_time
 
-            total_stamina = fish_stamina + proc_stamina + bait_stamina
-            total_time    = fish_time    + proc_time    + bait_time
+            total_stamina = fish_stamina + proc_stamina + bait_stamina + ing_stamina
+            total_time    = fish_time    + proc_time    + bait_time    + ing_time
 
             fish_step = {
                 'type':     'fish',
@@ -802,14 +903,14 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'source_node':          rid,
                 'node_label':           label,
                 'fish_name':            input_name,
-                'steps':                bait_steps + [fish_step, proc_step],
+                'steps':                bait_steps + [fish_step] + ing_steps + [proc_step],
                 'total_stamina':        total_stamina,
                 'total_time_seconds':   total_time,
                 'total_casts':          total_fish_casts,
                 'total_actions':        proc_attempts,
                 'items_per_full_node':  items_per_node,
-                'external_ingredients': act_external,
-                'products': _products('item_chain_by_item', ic, input_id, fish_needed, sid, quantity, game_data),
+                'external_ingredients': act_external + ing_external,
+                'products': _products('item_chain_by_item', ic, input_id, runs, sid, quantity, game_data),
             })
 
     # ── Method D: Multi-step crafting chain (e.g. ingots) ─────────────────────
