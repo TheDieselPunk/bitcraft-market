@@ -1,6 +1,6 @@
 {
  "__meta__": {
-  "built": "2026-11-09T15:05:13Z",
+  "built": "2026-11-09T15:40:42Z",
   "units": "raw world units; game E/N = raw / 3; speeds in raw units/s"
  },
  "node_types": [
@@ -311,7 +311,7 @@
     {
      "min_level": 50,
      "nodes": 2450,
-     "avg_hop": 47.0,
+     "avg_hop": 47.1,
      "share": {
       "wreckage": 0.66,
       "shipment": 0.2596,
@@ -325,13 +325,13 @@
    "counts": {
     "wreckage": 2675,
     "shipment": 1007,
-    "treasure": 347
+    "treasure": 356
    },
    "brackets": [
     {
      "min_level": 1,
      "nodes": 2675,
-     "avg_hop": 52.7,
+     "avg_hop": 56.0,
      "share": {
       "wreckage": 1.0
      }
@@ -339,7 +339,7 @@
     {
      "min_level": 20,
      "nodes": 3682,
-     "avg_hop": 50.4,
+     "avg_hop": 48.5,
      "share": {
       "wreckage": 0.7265,
       "shipment": 0.2735
@@ -347,12 +347,12 @@
     },
     {
      "min_level": 50,
-     "nodes": 4029,
-     "avg_hop": 46.4,
+     "nodes": 4038,
+     "avg_hop": 51.9,
      "share": {
-      "wreckage": 0.6639,
-      "shipment": 0.2499,
-      "treasure": 0.0861
+      "wreckage": 0.6625,
+      "shipment": 0.2494,
+      "treasure": 0.0882
      }
     }
    ]
@@ -413,7 +413,7 @@
     {
      "min_level": 20,
      "nodes": 2380,
-     "avg_hop": 48.7,
+     "avg_hop": 50.0,
      "share": {
       "wreckage": 0.7399,
       "shipment": 0.2601
@@ -504,6 +504,49 @@
      }
     }
    ]
+  }
+ },
+ "sea_nodes": {
+  "158": {
+   "name": "Salt Deposit",
+   "regions": {
+    "7": {
+     "nodes": 2684,
+     "avg_hop": 31.7
+    },
+    "8": {
+     "nodes": 2010,
+     "avg_hop": 36.3
+    },
+    "9": {
+     "nodes": 3262,
+     "avg_hop": 26.8
+    },
+    "12": {
+     "nodes": 2189,
+     "avg_hop": 42.3
+    },
+    "13": {
+     "nodes": 1409,
+     "avg_hop": 17.7
+    },
+    "14": {
+     "nodes": 3068,
+     "avg_hop": 28.8
+    },
+    "17": {
+     "nodes": 2945,
+     "avg_hop": 31.4
+    },
+    "18": {
+     "nodes": 3008,
+     "avg_hop": 32.6
+    },
+    "19": {
+     "nodes": 1961,
+     "avg_hop": 37.5
+    }
+   }
   }
  }
 }

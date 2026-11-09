@@ -8,6 +8,8 @@ Calculator turns a run into boxes per hour from:
   - ships:      every boat's Ocean speed (static data), matched to the player's vault
   - regions:    per Sailing level bracket, the average hop of a nearest-node route
                 over the live nodes (BitJita relay) and each node type's share of it
+  - sea_nodes:  the same average hop per region for gatherable nodes that stand at
+                sea (Salt Deposits), so their Direct routes add the sailing between them
 
 Positions and speeds are both raw world units (game E/N = raw / 3), so hop / speed
 is seconds. Needs websocket-client and numpy (CI installs them; the API doesn't).
@@ -35,6 +37,12 @@ NODE_TYPES = {
     'shipment': 1043012047,   # Lost Shipment
     'treasure': 1293969473,   # Lost Treasure
 }
+
+# Gatherable nodes that stand in open sea, farmed from a ship. Lake fish, baitfish and
+# lilies also only spawn in water, but are reached from the shore.
+SEA_NODES = [
+    158,   # Salt Deposit: shallow sea (depth 0-5), respawns in 10 minutes
+]
 
 # Mainland regions only: the seasonal island regions (3, 11, 15, 23) can't be reached.
 REGIONS = {
@@ -180,6 +188,22 @@ def build_regions(node_types):
     return regions
 
 
+def build_sea_nodes(resources):
+    """Live count and average nearest-node hop per region for each SEA_NODES type."""
+    rng = np.random.default_rng(0)
+    out = {}
+    for rid in SEA_NODES:
+        regions = {}
+        for region in REGIONS:
+            points = node_positions(region, rid)
+            if len(points) >= 2:
+                regions[str(region)] = {'nodes': len(points), 'avg_hop': round(average_hop(points, rng), 1)}
+        name = resources[rid]['name']
+        print(f'  {name}: ' + ', '.join(f"R{r} {v['nodes']} ({v['avg_hop'] / 3:.0f} tiles)" for r, v in regions.items()))
+        out[str(rid)] = {'name': name, 'regions': regions}
+    return out
+
+
 def main():
     resources  = {r['id']: r for r in to_list(fetch_json('resource_desc.json'))}
     extraction = to_list(fetch_json('extraction_recipe_desc.json'))
@@ -190,7 +214,8 @@ def main():
     ships      = build_ships(to_list(fetch_json('deployable_desc.json')))
     print('Reading sailing cargo nodes from the BitJita relay ...')
     try:
-        regions = build_regions(node_types)
+        regions   = build_regions(node_types)
+        sea_nodes = build_sea_nodes(resources)
     except Exception as exc:
         # Keep the last good snapshot rather than publish an empty one
         print(f'  Relay unavailable ({exc}); leaving {OUT_FILE.name} unchanged.')
@@ -203,6 +228,7 @@ def main():
         'node_types': node_types,
         'ships':      ships,
         'regions':    regions,
+        'sea_nodes':  sea_nodes,
     }, indent=1))
     print(f'Written to {OUT_FILE}')
 

@@ -230,7 +230,7 @@
         <div class="field" style="margin:0">
           <label>Travel / Node (min)</label>
           <input type="number" id="node-minutes" value="0" min="0" step="0.5" oninput="rerender()"
-                 title="Minutes to reach and bait/chum each node. The chain's own time doesn't include it; gold/hr does." />
+                 title="Minutes to reach and bait/chum each node. The chain's own time doesn't include it; gold/hr does. Routes that sail between their nodes (salt) already include the trips." />
         </div>
       </div>
       <div class="field" style="margin:10px 0 0">
@@ -270,10 +270,10 @@
       </div>
     </div>
 
-    <!-- Sailing Cargo -->
+    <!-- Sailing -->
     <div class="card">
-      <div class="card-title">Sailing Cargo</div>
-      <div class="ring-subtitle">Boxes from Lost Wreckage (Sailing 1), Shipment (20) and Treasure (50), one per node, sailing nearest-first at the ship's ocean speed.</div>
+      <div class="card-title">Sailing</div>
+      <div class="ring-subtitle">Boxes from Lost Wreckage (Sailing 1), Shipment (20) and Treasure (50), one per node, sailing nearest-first at the ship's ocean speed. Salt Deposits stand at sea too, so salt routes add the sailing between them.</div>
       <div class="field">
         <label for="ship-select">Ship</label>
         <select id="ship-select"></select>
@@ -681,7 +681,9 @@ function rerender() {
 function methodEconomics(m, qty) {
   const nodeMin = parseFloat(document.getElementById('node-minutes').value) || 0;
   const window_ = document.getElementById('sales-window').value;
-  const nodes   = m.items_per_full_node ? qty / m.items_per_full_node : 0;
+  // Routes that sail between their nodes (Salt Deposits) already time the trips
+  const sails   = m.steps.some(s => s.type === 'sail');
+  const nodes   = m.items_per_full_node && !sails ? qty / m.items_per_full_node : 0;
   const hours   = (m.total_time_seconds + nodes * nodeMin * 60) / 3600;
   const mk      = m.market;
   if (!mk || hours <= 0) return { nodes, nodeMin, window_, hours, gphInstant: null, gphListed: null, gphCapped: null };

@@ -540,6 +540,34 @@ def _products(table, entry, input_id, runs, item_id, quantity, game_data):
     return {out_id: qty * runs for out_id, qty in per_run.items()}
 
 
+def sea_route(resource_id, nodes, sailing):
+    """
+    Sailing between nodes that stand at sea (sailing_cargo.json sea_nodes: Salt
+    Deposits sit in shallow sea, so you farm them from a ship). Returns ([sail step],
+    seconds) for visiting `nodes` of them nearest-first in sailing['region'], or the
+    region with the shortest hops; ([], 0.0) without a ship or for any other node.
+    """
+    data = load_sailing_data()
+    sea = (data or {}).get('sea_nodes', {}).get(str(resource_id))
+    if not sea or not sailing or sailing['ship_speed'] <= 0 or not nodes:
+        return [], 0.0
+    regions = {rid: r for rid, r in sea['regions'].items() if not sailing['region'] or rid == sailing['region']}
+    if not regions:
+        return [], 0.0
+    rid, route = min(regions.items(), key=lambda kv: kv[1]['avg_hop'])
+    sail_time = nodes * route['avg_hop'] / sailing['ship_speed']
+    region = data['regions'].get(rid, {}).get('name', 'Region')
+    return [{
+        'type':      'sail',
+        'label':     f"Sail to {nodes:,.0f} {sea['name']}s in {region} (R{rid}), "
+                     f"{route['avg_hop'] / 3:.0f} tiles apart on average",
+        'qty_out':   nodes,
+        'qty_label': 'nodes',
+        'stamina':   0.0,
+        'time_sec':  sail_time,
+    }], sail_time
+
+
 def resolve_sailing_method(item_id, quantity, sailing, gather_speed, craft_speed, recipes, game_data):
     """
     Sailing cargo run (Method S): sail nearest-node-first between Lost Wreckage /
@@ -692,13 +720,14 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
         act_steps, act_stamina, act_time, act_external = compute_activation_cost(
             e, quantity, power, tool_powers, gather_speed, craft_speed, game_data, recipes
         )
+        sail_steps, sail_time = sea_route(rid, quantity / items_per_node if items_per_node else 0, sailing)
 
         methods.append({
             'method_name': f'Direct — {label}',
             'source_node': rid,
             'node_label':  label,
             'fish_name':   None,
-            'steps': act_steps + [{
+            'steps': act_steps + sail_steps + [{
                 'type':     'extract',
                 'label':    f'Extract {iname}',
                 'qty_out':  quantity,
@@ -708,7 +737,7 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
                 'time_sec': time_sec,
             }],
             'total_stamina':       stamina + act_stamina,
-            'total_time_seconds':  time_sec + act_time,
+            'total_time_seconds':  time_sec + act_time + sail_time,
             'total_casts':         total_casts,
             'total_actions':       0.0,
             'items_per_full_node': items_per_node,
@@ -874,6 +903,11 @@ def resolve_all_methods(item_id, quantity, tool_powers, gather_speed, craft_spee
             bait_steps   += act_steps
             bait_stamina += act_stamina
             bait_time    += act_time
+
+            # Sailing between the nodes, for ones that stand at sea (Salt Deposits)
+            sail_steps, sail_time = sea_route(rid, fish_needed / fish_per_node if fish_per_node else 0, sailing)
+            bait_steps += sail_steps
+            bait_time  += sail_time
 
             total_stamina = fish_stamina + proc_stamina + bait_stamina + ing_stamina
             total_time    = fish_time    + proc_time    + bait_time    + ing_time
