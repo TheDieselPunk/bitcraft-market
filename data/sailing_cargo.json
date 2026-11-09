@@ -1,6 +1,6 @@
 {
  "__meta__": {
-  "built": "2026-11-08T21:38:59Z",
+  "built": "2026-11-09T04:31:28Z",
   "units": "raw world units; game E/N = raw / 3; speeds in raw units/s"
  },
  "node_types": [
@@ -183,7 +183,7 @@
     {
      "min_level": 1,
      "nodes": 1865,
-     "avg_hop": 55.4,
+     "avg_hop": 58.2,
      "share": {
       "wreckage": 1.0
      }
@@ -191,7 +191,7 @@
     {
      "min_level": 20,
      "nodes": 2591,
-     "avg_hop": 45.0,
+     "avg_hop": 49.4,
      "share": {
       "wreckage": 0.7198,
       "shipment": 0.2802
@@ -200,7 +200,7 @@
     {
      "min_level": 50,
      "nodes": 2823,
-     "avg_hop": 44.4,
+     "avg_hop": 49.6,
      "share": {
       "wreckage": 0.6606,
       "shipment": 0.2572,
@@ -257,7 +257,7 @@
     {
      "min_level": 1,
      "nodes": 2288,
-     "avg_hop": 53.5,
+     "avg_hop": 62.0,
      "share": {
       "wreckage": 1.0
      }
@@ -265,7 +265,7 @@
     {
      "min_level": 20,
      "nodes": 3137,
-     "avg_hop": 52.8,
+     "avg_hop": 51.0,
      "share": {
       "wreckage": 0.7294,
       "shipment": 0.2706
@@ -274,7 +274,7 @@
     {
      "min_level": 50,
      "nodes": 3440,
-     "avg_hop": 42.8,
+     "avg_hop": 48.1,
      "share": {
       "wreckage": 0.6651,
       "shipment": 0.2468,
@@ -286,36 +286,36 @@
   "12": {
    "name": "Elyndor",
    "counts": {
-    "wreckage": 1617,
+    "wreckage": 1615,
     "shipment": 636,
     "treasure": 197
    },
    "brackets": [
     {
      "min_level": 1,
-     "nodes": 1617,
-     "avg_hop": 50.5,
+     "nodes": 1615,
+     "avg_hop": 52.9,
      "share": {
       "wreckage": 1.0
      }
     },
     {
      "min_level": 20,
-     "nodes": 2253,
-     "avg_hop": 46.3,
+     "nodes": 2251,
+     "avg_hop": 40.6,
      "share": {
-      "wreckage": 0.7177,
-      "shipment": 0.2823
+      "wreckage": 0.7175,
+      "shipment": 0.2825
      }
     },
     {
      "min_level": 50,
-     "nodes": 2450,
-     "avg_hop": 46.9,
+     "nodes": 2448,
+     "avg_hop": 39.0,
      "share": {
-      "wreckage": 0.66,
-      "shipment": 0.2596,
-      "treasure": 0.0804
+      "wreckage": 0.6597,
+      "shipment": 0.2598,
+      "treasure": 0.0805
      }
     }
    ]
@@ -331,7 +331,7 @@
     {
      "min_level": 1,
      "nodes": 2675,
-     "avg_hop": 55.0,
+     "avg_hop": 60.2,
      "share": {
       "wreckage": 1.0
      }
@@ -339,7 +339,7 @@
     {
      "min_level": 20,
      "nodes": 3682,
-     "avg_hop": 51.7,
+     "avg_hop": 46.5,
      "share": {
       "wreckage": 0.7265,
       "shipment": 0.2735
@@ -348,7 +348,7 @@
     {
      "min_level": 50,
      "nodes": 4038,
-     "avg_hop": 47.7,
+     "avg_hop": 48.3,
      "share": {
       "wreckage": 0.6625,
       "shipment": 0.2494,
@@ -368,7 +368,7 @@
     {
      "min_level": 1,
      "nodes": 1941,
-     "avg_hop": 52.6,
+     "avg_hop": 56.0,
      "share": {
       "wreckage": 1.0
      }
@@ -376,7 +376,7 @@
     {
      "min_level": 20,
      "nodes": 2756,
-     "avg_hop": 43.9,
+     "avg_hop": 40.7,
      "share": {
       "wreckage": 0.7043,
       "shipment": 0.2957
@@ -385,7 +385,7 @@
     {
      "min_level": 50,
      "nodes": 3008,
-     "avg_hop": 44.5,
+     "avg_hop": 44.0,
      "share": {
       "wreckage": 0.6453,
       "shipment": 0.2709,
@@ -442,7 +442,7 @@
     {
      "min_level": 1,
      "nodes": 1464,
-     "avg_hop": 55.9,
+     "avg_hop": 59.1,
      "share": {
       "wreckage": 1.0
      }
@@ -450,7 +450,7 @@
     {
      "min_level": 20,
      "nodes": 1988,
-     "avg_hop": 46.8,
+     "avg_hop": 45.5,
      "share": {
       "wreckage": 0.7364,
       "shipment": 0.2636
@@ -459,7 +459,7 @@
     {
      "min_level": 50,
      "nodes": 2177,
-     "avg_hop": 50.9,
+     "avg_hop": 49.8,
      "share": {
       "wreckage": 0.6725,
       "shipment": 0.2407,
@@ -471,35 +471,35 @@
   "19": {
    "name": "Zephra",
    "counts": {
-    "wreckage": 1747,
+    "wreckage": 1748,
     "shipment": 701,
     "treasure": 248
    },
    "brackets": [
     {
      "min_level": 1,
-     "nodes": 1747,
-     "avg_hop": 64.6,
+     "nodes": 1748,
+     "avg_hop": 52.6,
      "share": {
       "wreckage": 1.0
      }
     },
     {
      "min_level": 20,
-     "nodes": 2448,
-     "avg_hop": 48.4,
+     "nodes": 2449,
+     "avg_hop": 47.7,
      "share": {
-      "wreckage": 0.7136,
-      "shipment": 0.2864
+      "wreckage": 0.7138,
+      "shipment": 0.2862
      }
     },
     {
      "min_level": 50,
-     "nodes": 2696,
-     "avg_hop": 49.0,
+     "nodes": 2697,
+     "avg_hop": 48.3,
      "share": {
-      "wreckage": 0.648,
-      "shipment": 0.26,
+      "wreckage": 0.6481,
+      "shipment": 0.2599,
       "treasure": 0.092
      }
     }
