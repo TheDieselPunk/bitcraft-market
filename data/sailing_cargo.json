@@ -1,6 +1,6 @@
 {
  "__meta__": {
-  "built": "2026-11-10T22:48:43Z",
+  "built": "2026-11-11T04:34:30Z",
   "units": "raw world units; game E/N = raw / 3; speeds in raw units/s"
  },
  "node_types": [
@@ -183,7 +183,7 @@
     {
      "min_level": 1,
      "nodes": 1865,
-     "avg_hop": 51.8,
+     "avg_hop": 52.6,
      "share": {
       "wreckage": 1.0
      }
@@ -191,7 +191,7 @@
     {
      "min_level": 20,
      "nodes": 2591,
-     "avg_hop": 44.4,
+     "avg_hop": 46.8,
      "share": {
       "wreckage": 0.7198,
       "shipment": 0.2802
@@ -200,7 +200,7 @@
     {
      "min_level": 50,
      "nodes": 2823,
-     "avg_hop": 42.7,
+     "avg_hop": 47.0,
      "share": {
       "wreckage": 0.6606,
       "shipment": 0.2572,
@@ -294,7 +294,7 @@
     {
      "min_level": 1,
      "nodes": 1617,
-     "avg_hop": 58.9,
+     "avg_hop": 57.0,
      "share": {
       "wreckage": 1.0
      }
@@ -302,7 +302,7 @@
     {
      "min_level": 20,
      "nodes": 2253,
-     "avg_hop": 45.1,
+     "avg_hop": 43.8,
      "share": {
       "wreckage": 0.7177,
       "shipment": 0.2823
@@ -311,7 +311,7 @@
     {
      "min_level": 50,
      "nodes": 2450,
-     "avg_hop": 43.3,
+     "avg_hop": 44.3,
      "share": {
       "wreckage": 0.66,
       "shipment": 0.2596,
@@ -385,7 +385,7 @@
     {
      "min_level": 50,
      "nodes": 3008,
-     "avg_hop": 38.2,
+     "avg_hop": 37.7,
      "share": {
       "wreckage": 0.6453,
       "shipment": 0.2709,
@@ -442,7 +442,7 @@
     {
      "min_level": 1,
      "nodes": 1464,
-     "avg_hop": 49.8,
+     "avg_hop": 44.9,
      "share": {
       "wreckage": 1.0
      }
@@ -450,7 +450,7 @@
     {
      "min_level": 20,
      "nodes": 1988,
-     "avg_hop": 37.5,
+     "avg_hop": 32.4,
      "share": {
       "wreckage": 0.7364,
       "shipment": 0.2636
@@ -459,7 +459,7 @@
     {
      "min_level": 50,
      "nodes": 2177,
-     "avg_hop": 42.5,
+     "avg_hop": 39.6,
      "share": {
       "wreckage": 0.6725,
       "shipment": 0.2407,
@@ -479,7 +479,7 @@
     {
      "min_level": 1,
      "nodes": 1748,
-     "avg_hop": 49.5,
+     "avg_hop": 47.3,
      "share": {
       "wreckage": 1.0
      }
@@ -487,7 +487,7 @@
     {
      "min_level": 20,
      "nodes": 2449,
-     "avg_hop": 45.2,
+     "avg_hop": 45.8,
      "share": {
       "wreckage": 0.7138,
       "shipment": 0.2862
@@ -496,7 +496,7 @@
     {
      "min_level": 50,
      "nodes": 2697,
-     "avg_hop": 46.3,
+     "avg_hop": 42.2,
      "share": {
       "wreckage": 0.6481,
       "shipment": 0.2599,
@@ -512,7 +512,7 @@
    "regions": {
     "7": {
      "nodes": 2684,
-     "avg_hop": 33.8
+     "avg_hop": 35.8
     },
     "8": {
      "nodes": 2019,
@@ -524,7 +524,7 @@
     },
     "12": {
      "nodes": 2189,
-     "avg_hop": 44.6
+     "avg_hop": 35.7
     },
     "13": {
      "nodes": 1409,
@@ -536,11 +536,11 @@
     },
     "17": {
      "nodes": 2945,
-     "avg_hop": 27.7
+     "avg_hop": 31.0
     },
     "18": {
      "nodes": 3008,
-     "avg_hop": 32.5
+     "avg_hop": 31.6
     },
     "19": {
      "nodes": 1961,
