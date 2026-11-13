@@ -1,6 +1,6 @@
 {
  "__meta__": {
-  "built": "2026-11-13T04:56:37Z",
+  "built": "2026-11-13T13:53:05Z",
   "units": "raw world units; game E/N = raw / 3; speeds in raw units/s"
  },
  "node_types": [
@@ -175,35 +175,35 @@
   "7": {
    "name": "Virexal",
    "counts": {
-    "wreckage": 1864,
+    "wreckage": 1865,
     "shipment": 726,
     "treasure": 232
    },
    "brackets": [
     {
      "min_level": 1,
-     "nodes": 1864,
-     "avg_hop": 58.0,
+     "nodes": 1865,
+     "avg_hop": 57.8,
      "share": {
       "wreckage": 1.0
      }
     },
     {
      "min_level": 20,
-     "nodes": 2590,
-     "avg_hop": 46.2,
+     "nodes": 2591,
+     "avg_hop": 46.4,
      "share": {
-      "wreckage": 0.7197,
-      "shipment": 0.2803
+      "wreckage": 0.7198,
+      "shipment": 0.2802
      }
     },
     {
      "min_level": 50,
-     "nodes": 2822,
-     "avg_hop": 50.5,
+     "nodes": 2823,
+     "avg_hop": 51.9,
      "share": {
-      "wreckage": 0.6605,
-      "shipment": 0.2573,
+      "wreckage": 0.6606,
+      "shipment": 0.2572,
       "treasure": 0.0822
      }
     }
@@ -294,7 +294,7 @@
     {
      "min_level": 1,
      "nodes": 1617,
-     "avg_hop": 60.9,
+     "avg_hop": 54.9,
      "share": {
       "wreckage": 1.0
      }
@@ -302,7 +302,7 @@
     {
      "min_level": 20,
      "nodes": 2253,
-     "avg_hop": 47.0,
+     "avg_hop": 43.4,
      "share": {
       "wreckage": 0.7177,
       "shipment": 0.2823
@@ -311,7 +311,7 @@
     {
      "min_level": 50,
      "nodes": 2450,
-     "avg_hop": 46.2,
+     "avg_hop": 54.7,
      "share": {
       "wreckage": 0.66,
       "shipment": 0.2596,
@@ -348,7 +348,7 @@
     {
      "min_level": 50,
      "nodes": 4038,
-     "avg_hop": 50.7,
+     "avg_hop": 50.8,
      "share": {
       "wreckage": 0.6625,
       "shipment": 0.2494,
@@ -442,7 +442,7 @@
     {
      "min_level": 1,
      "nodes": 1464,
-     "avg_hop": 49.1,
+     "avg_hop": 51.9,
      "share": {
       "wreckage": 1.0
      }
@@ -450,7 +450,7 @@
     {
      "min_level": 20,
      "nodes": 1988,
-     "avg_hop": 54.4,
+     "avg_hop": 41.3,
      "share": {
       "wreckage": 0.7364,
       "shipment": 0.2636
@@ -459,7 +459,7 @@
     {
      "min_level": 50,
      "nodes": 2177,
-     "avg_hop": 46.8,
+     "avg_hop": 46.4,
      "share": {
       "wreckage": 0.6725,
       "shipment": 0.2407,
@@ -520,11 +520,11 @@
     },
     "9": {
      "nodes": 3260,
-     "avg_hop": 25.5
+     "avg_hop": 25.8
     },
     "12": {
      "nodes": 2189,
-     "avg_hop": 36.3
+     "avg_hop": 39.0
     },
     "13": {
      "nodes": 1409,
@@ -540,11 +540,11 @@
     },
     "18": {
      "nodes": 3008,
-     "avg_hop": 33.8
+     "avg_hop": 33.5
     },
     "19": {
      "nodes": 1961,
-     "avg_hop": 41.5
+     "avg_hop": 38.8
     }
    }
   }
