@@ -599,7 +599,8 @@ def _resolve_cargo_recipe(item_id, quantity, recipe, tools, acc, all_recipes,
                            game_data, skill_names, visited=frozenset(), depth=0):
     """PATH E: Process a gatherable Cargo item into regular items."""
     tp = _get_tool_power(recipe, tools)
-    output_qty = max(recipe.get('output_quantity', 1), 1)
+    # Rare results are fractional: Briny Linus gives 0.05 Briny Linus Scale per craft, so 20 crafts a scale
+    output_qty = recipe.get('output_quantity') or 1
     actions = max(recipe.get('actions_required', 1), 1)
     crafts_needed = quantity / output_qty
 
