@@ -20,7 +20,7 @@ jobs:
       - name: Install relay client
         run: pip install websocket-client numpy
 
-      # Live node counts from the BitJita relay, read by the next two builds to drop
+      # Live node counts from the bitcraftsync relay (BitJita's as fallback), read by the next two builds to drop
       # nodes the world doesn't have (rebuilt about once a day; kept if the relay is down)
       - name: Build live node snapshot
         run: python scripts/build_live_nodes.py
@@ -34,7 +34,7 @@ jobs:
       - name: Build equipment data cache
         run: python scripts/build_equipment_data.py
 
-      # Live node positions from the BitJita relay (keeps the last snapshot if it's down)
+      # Live node positions from the bitcraftsync relay (keeps the last snapshot if it's down)
       - name: Build sailing cargo snapshot
         run: python scripts/build_sailing_cargo.py
 

@@ -7,7 +7,7 @@ Calculator turns a run into boxes per hour from:
   - node_types: each node's Sailing level, open time and box (static data)
   - ships:      every boat's Ocean speed (static data), matched to the player's vault
   - regions:    per Sailing level bracket, the average hop of a nearest-node route
-                over the live nodes (BitJita relay) and each node type's share of it
+                over the live nodes (bitcraftsync relay, BitJita's as fallback) and each node type's share of it
   - sea_nodes:  the same average hop per region for gatherable nodes that stand at
                 sea (Salt Deposits), so their Direct routes add the sailing between them
 
@@ -21,15 +21,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
-import websocket
 
 sys.path.insert(0, str(Path(__file__).parent))
 from build_game_data import fetch_json, possibility_chances, to_list
+from _relay import RegionRelay
 
 OUT_FILE = Path(__file__).parent.parent / 'data' / 'sailing_cargo.json'
-
-RELAY_WS_URL  = 'wss://relay.bitjita.com/v1/database/bitcraft-live-{region}/subscribe?compression=None&light=true'
-RELAY_HEADERS = ['User-Agent: BitJita (Billard)']
 
 # Unopened nodes, as tracked by BitcraftCV's navigate.py
 NODE_TYPES = {
@@ -54,30 +51,24 @@ ROUTE_STARTS = 40   # nearest-node routes simulated per region and bracket
 ROUTE_HOPS   = 60   # hops per route; nodes respawn, so short routes match steady play
 
 
-def node_positions(region, resource_id, timeout=15):
-    """Raw (x, z) of every node of one resource type in a region's live DB."""
-    ws = websocket.create_connection(RELAY_WS_URL.format(region=region),
-                                     subprotocols=['v1.json.spacetimedb'],
-                                     header=RELAY_HEADERS, timeout=timeout)
-    try:
-        query = ('SELECT location_state.* FROM location_state JOIN resource_state '
-                 'ON location_state.entity_id = resource_state.entity_id '
-                 f'WHERE resource_state.resource_id = {int(resource_id)}')
-        ws.send(json.dumps({'Subscribe': {'query_strings': [query], 'request_id': 1}}))
-        while True:   # IdentityToken arrives first
-            msg = json.loads(ws.recv())
-            if 'SubscriptionError' in msg:
-                raise RuntimeError(msg['SubscriptionError'].get('error', msg))
-            if 'InitialSubscription' in msg:
-                break
-    finally:
-        ws.close()
-    rows = []
-    for table in msg['InitialSubscription']['database_update']['tables']:
-        for update in table['updates']:
-            rows.extend(json.loads(row) for row in update['inserts'])
+def node_positions(relay, resource_id):
+    """Raw (x, z) of every node of one resource type in the relay's region."""
+    query = ('SELECT location_state.* FROM location_state JOIN resource_state '
+             'ON location_state.entity_id = resource_state.entity_id '
+             f'WHERE resource_state.resource_id = {int(resource_id)}')
+    rows = relay.snapshot([query]).get('location_state', [])
     # location_state row: [entity_id, chunk_index, x, z, dimension]
     return [(float(r[2]), float(r[3])) for r in rows]
+
+
+def region_positions(resource_ids):
+    """{region: {resource_id: [(x, z), ...]}}, one relay connection per region."""
+    out = {}
+    for region in REGIONS:
+        with RegionRelay(region) as relay:
+            out[region] = {rid: node_positions(relay, rid) for rid in resource_ids}
+        print(f'  R{region} {REGIONS[region]}: read via {relay.via}')
+    return out
 
 
 def average_hop(points, rng):
@@ -163,12 +154,12 @@ def build_ships(deployables):
     return sorted(ships, key=lambda s: (-s['ocean_speed'], s['name']))
 
 
-def build_regions(node_types):
+def build_regions(node_types, live):
     rng = np.random.default_rng(0)
     levels = sorted({t['sailing_level'] for t in node_types})
     regions = {}
     for region, name in REGIONS.items():
-        positions = {t['key']: node_positions(region, t['resource_id']) for t in node_types}
+        positions = {t['key']: live[region][t['resource_id']] for t in node_types}
         counts = {k: len(v) for k, v in positions.items()}
         print(f'  R{region} {name}: {counts}')
         brackets = []
@@ -188,14 +179,14 @@ def build_regions(node_types):
     return regions
 
 
-def build_sea_nodes(resources):
+def build_sea_nodes(resources, live):
     """Live count and average nearest-node hop per region for each SEA_NODES type."""
     rng = np.random.default_rng(0)
     out = {}
     for rid in SEA_NODES:
         regions = {}
         for region in REGIONS:
-            points = node_positions(region, rid)
+            points = live[region][rid]
             if len(points) >= 2:
                 regions[str(region)] = {'nodes': len(points), 'avg_hop': round(average_hop(points, rng), 1)}
         name = resources[rid]['name']
@@ -212,10 +203,11 @@ def main():
     item_lists = {l['id']: l for l in to_list(fetch_json('item_list_desc.json'))}
     node_types = build_node_types(resources, extraction, crafting, items, item_lists)
     ships      = build_ships(to_list(fetch_json('deployable_desc.json')))
-    print('Reading sailing cargo nodes from the BitJita relay ...')
+    print('Reading sailing cargo nodes from the relay ...')
     try:
-        regions   = build_regions(node_types)
-        sea_nodes = build_sea_nodes(resources)
+        live      = region_positions([t['resource_id'] for t in node_types] + SEA_NODES)
+        regions   = build_regions(node_types, live)
+        sea_nodes = build_sea_nodes(resources, live)
     except Exception as exc:
         # Keep the last good snapshot rather than publish an empty one
         print(f'  Relay unavailable ({exc}); leaving {OUT_FILE.name} unchanged.')

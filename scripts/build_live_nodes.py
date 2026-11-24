@@ -1,6 +1,6 @@
 """
 Build data/live_nodes.json: how many of each gatherable node stand in the mainland
-regions right now, from the BitJita relay.
+regions right now, from the bitcraftsync relay (BitJita's as fallback).
 
 build_game_data.py and build_recipes.py drop nodes with fewer than MIN_LIVE_NODES in
 every region, so the calculators don't offer routes from nodes the world doesn't have:
@@ -10,8 +10,11 @@ or baits one, so they count the node they're made from. Tag-skipped and prospect
 nodes aren't looked up: they're dropped anyway, or (searched fishing spots) kept
 though they never stand in the world until someone finds one.
 
-A node counts as live as soon as one region has enough, so common nodes cost one
-lookup. Rebuilt at most every REFRESH_HOURS (pass --force to rebuild now); if the
+A node counts as live as soon as one region has enough. Counting every node of the
+common types would mean millions of rows (4.7M in the last full count), so each region
+is first sampled: every node in STRIPS map rows spread across it, one subscription per
+row (~35k rows each). Common types pass there; only the types still short are counted
+over the whole region. Counts are therefore lower bounds once they reach MIN_LIVE_NODES. Rebuilt at most every REFRESH_HOURS (pass --force to rebuild now); if the
 relay is down the last snapshot is kept. Needs websocket-client (CI installs it).
 """
 
@@ -20,44 +23,45 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import websocket
-
 sys.path.insert(0, str(Path(__file__).parent))
 from build_game_data import (
     LIVE_NODES_FILE, MIN_LIVE_NODES, SKIPPED_RESOURCE_TAGS, build_node_activation, fetch_json,
     prospected_resource_ids, to_list,
 )
-from build_sailing_cargo import REGIONS, RELAY_HEADERS, RELAY_WS_URL
+from _relay import RegionRelay
+from build_sailing_cargo import REGIONS
 
 REFRESH_HOURS = 20   # the 6-hourly CI job rebuilds this about once a day
 BATCH_SIZE    = 25   # node types per relay subscription
 HOME_REGION   = 12   # looked up first; most nodes stand here too
+STRIPS        = 4    # sampled map rows per region
+STRIP_MIN     = 50   # sample only while at least this many types are pending
 
 
-def count_nodes(region, resource_ids):
-    """{resource_id: live node count} for several node types in one region."""
-    ws = websocket.create_connection(RELAY_WS_URL.format(region=region),
-                                     subprotocols=['v1.json.spacetimedb'],
-                                     header=RELAY_HEADERS, timeout=60)
-    try:
-        ws.send(json.dumps({'Subscribe': {
-            'query_strings': [f'SELECT * FROM resource_state WHERE resource_id = {int(r)}' for r in resource_ids],
-            'request_id':    1,
-        }}))
-        while True:   # IdentityToken arrives first
-            msg = json.loads(ws.recv())
-            if 'SubscriptionError' in msg:
-                raise RuntimeError(msg['SubscriptionError'].get('error', msg))
-            if 'InitialSubscription' in msg:
-                break
-    finally:
-        ws.close()
+def count_nodes(relay, resource_ids):
+    """{resource_id: live node count} for several node types in the relay's region."""
+    tables = relay.snapshot([f'SELECT * FROM resource_state WHERE resource_id = {int(r)}'
+                             for r in resource_ids])
     counts = dict.fromkeys(resource_ids, 0)
-    for table in msg['InitialSubscription']['database_update']['tables']:
-        for update in table['updates']:
-            for row in update['inserts']:
-                rid = json.loads(row)[1]   # resource_state row: [entity_id, resource_id, direction]
-                counts[rid] = counts.get(rid, 0) + 1
+    for row in tables.get('resource_state', []):
+        rid = row[1]   # resource_state row: [entity_id, resource_id, direction]
+        counts[rid] = counts.get(rid, 0) + 1
+    return counts
+
+
+def strip_counts(relay, wanted):
+    """{resource_id: node count} over STRIPS map rows spread across the region."""
+    _, min_z, _, height = relay.bounds()
+    counts = {}
+    for i in range(STRIPS):
+        z = min_z + int(height * (i + 0.5) / STRIPS)
+        tables = relay.snapshot([
+            'SELECT resource_state.* FROM resource_state JOIN location_state '
+            'ON resource_state.entity_id = location_state.entity_id '
+            f'WHERE location_state.chunk_index >= {z * 1000} AND location_state.chunk_index < {z * 1000 + 1000}'])
+        for row in tables.get('resource_state', []):
+            if row[1] in wanted:
+                counts[row[1]] = counts.get(row[1], 0) + 1
     return counts
 
 
@@ -66,11 +70,17 @@ def survey(resource_ids):
     best = dict.fromkeys(resource_ids, 0)
     pending = sorted(resource_ids)
     for region in [HOME_REGION] + [r for r in REGIONS if r != HOME_REGION]:
-        for i in range(0, len(pending), BATCH_SIZE):
-            for rid, n in count_nodes(region, pending[i:i + BATCH_SIZE]).items():
-                best[rid] = max(best[rid], n)
+        with RegionRelay(region) as relay:   # one connection per region, a subscription per query
+            if len(pending) >= STRIP_MIN:
+                for rid, n in strip_counts(relay, set(pending)).items():
+                    best[rid] = max(best[rid], n)
+                pending = [rid for rid in pending if best[rid] < MIN_LIVE_NODES]
+                print(f'  R{region} sampled: {len(pending)} node types left to count in full')
+            for i in range(0, len(pending), BATCH_SIZE):
+                for rid, n in count_nodes(relay, pending[i:i + BATCH_SIZE]).items():
+                    best[rid] = max(best[rid], n)
         pending = [rid for rid in pending if best[rid] < MIN_LIVE_NODES]
-        print(f'  R{region} {REGIONS[region]}: {len(pending)} node types still not found')
+        print(f'  R{region} {REGIONS[region]} (via {relay.via}): {len(pending)} node types still not found')
         if not pending:
             break
     return best
@@ -97,7 +107,7 @@ def main():
                   for rid, a in build_node_activation(extraction, resources, {}).items()}
     lookup     = {rid: made_from.get(rid, rid) for rid in sources}
 
-    print(f'Counting {len(set(lookup.values()))} node types on the BitJita relay ...')
+    print(f'Counting {len(set(lookup.values()))} node types on the relay ...')
     try:
         counts = survey(set(lookup.values()))
     except Exception as exc:
@@ -110,7 +120,7 @@ def main():
             'built':     datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
             'regions':   sorted(REGIONS),
             'min_nodes': MIN_LIVE_NODES,
-            'counts':    'best single-region count; lookups stop once a region has min_nodes',
+            'counts':    'best single-region count; a lower bound once >= min_nodes (sampled map rows)',
         },
         'nodes': nodes,
     }, indent=1))

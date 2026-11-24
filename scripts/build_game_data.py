@@ -490,7 +490,7 @@ UNFARMABLE_RESOURCE_TAGS = {
 SAILING_CARGO_TAGS = {'Sailing Cargo'}
 SKIPPED_RESOURCE_TAGS = REMOVED_RESOURCE_TAGS | UNFARMABLE_RESOURCE_TAGS | SAILING_CARGO_TAGS
 
-# Live node counts per resource from the BitJita relay (build_live_nodes.py). Nodes
+# Live node counts per resource from the relay (build_live_nodes.py). Nodes
 # with fewer than MIN_LIVE_NODES in every mainland region aren't standing world nodes:
 # they come from buildings, growth stages or events, or only grow on the islands.
 LIVE_NODES_FILE = OUT_FILE.parent / 'live_nodes.json'
