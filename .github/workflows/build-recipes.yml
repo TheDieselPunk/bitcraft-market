@@ -31,6 +31,9 @@ jobs:
       - name: Build recipe cache
         run: python scripts/build_recipes.py
 
+      - name: Build tool catalog
+        run: python scripts/build_tool_catalog.py
+
       - name: Build equipment data cache
         run: python scripts/build_equipment_data.py
 
@@ -42,6 +45,6 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/game_data.json data/recipes.json data/equipment_data.json data/sailing_cargo.json data/live_nodes.json
+          git add data/game_data.json data/recipes.json data/equipment_data.json data/sailing_cargo.json data/live_nodes.json data/tool_catalog.json
           git diff --cached --quiet || git commit -m "chore: refresh data cache [skip ci]"
           git push

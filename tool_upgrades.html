@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tool Upgrades — Bitcraft</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #1e1e2e;
+      --surface:   #2a2a3e;
+      --surface2:  #313244;
+      --accent:    #cba6f7;
+      --accent2:   #89b4fa;
+      --green:     #a6e3a1;
+      --yellow:    #f9e2af;
+      --red:       #f38ba8;
+      --fg:        #cdd6f4;
+      --fg-dim:    #6c7086;
+      --border:    #45475a;
+    }
+
+    body { background: var(--bg); color: var(--fg); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    header h1 { font-size: 16px; color: var(--accent); font-weight: 700; }
+    header a  { color: var(--fg-dim); font-size: 12px; text-decoration: none; }
+    header a:hover { color: var(--fg); }
+    .nav-sep { color: var(--border); }
+
+    main {
+      max-width: 1500px; margin: 0 auto; padding: 20px 24px;
+      display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start;
+    }
+    @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); padding: 16px; } }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    .card-title { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; font-weight: 600; }
+
+    .field { margin-bottom: 12px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label.lbl { display: block; font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+    .field input[type=text], .field select {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 7px 10px; color: var(--fg); font-size: 13px; outline: none;
+    }
+    .field input[type=text]:focus, .field select:focus { border-color: var(--accent); }
+    .check { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; cursor: pointer; line-height: 1.4; }
+    .check input { margin-top: 2px; accent-color: var(--accent2); }
+    .check .sub { display: block; color: var(--fg-dim); font-size: 11px; }
+
+    .btn {
+      width: 100%; padding: 9px; background: var(--surface2); border: 1px solid var(--accent);
+      color: var(--accent); border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer;
+    }
+    .btn:hover:not(:disabled) { background: rgba(203,166,247,.12); }
+    .btn:disabled { border-color: var(--border); color: var(--fg-dim); cursor: not-allowed; }
+    .status { font-size: 11px; color: var(--fg-dim); margin-top: 8px; min-height: 16px; }
+    .status.err { color: var(--red); }
+
+    .region-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+    .region-btn {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 5px 4px;
+      font-size: 11px; font-weight: 600; color: var(--fg-dim); cursor: pointer; text-align: center;
+    }
+    .region-btn.active { border-color: var(--accent2); color: var(--accent2); background: rgba(137,180,250,.1); }
+    .region-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+    .region-action-btn {
+      flex: 1; padding: 4px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; font-size: 10px; color: var(--fg-dim); cursor: pointer;
+    }
+
+    .hint { font-size: 11px; color: var(--fg-dim); line-height: 1.5; }
+    .hint + .hint { margin-top: 8px; }
+    .legend { display: grid; gap: 6px; font-size: 12px; }
+
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    thead tr { background: var(--surface2); }
+    th { padding: 8px 10px; text-align: left; font-size: 10px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+    th.num, td.num { text-align: right; }
+    tbody tr { border-top: 1px solid var(--border); }
+    tbody tr:hover { background: var(--surface2); }
+    td { padding: 7px 10px; white-space: nowrap; }
+    tr.type-row td { background: var(--surface2); padding: 9px 10px; }
+    tr.type-row .tname { font-weight: 700; font-size: 13px; }
+    tr.type-row .tmeta { color: var(--fg-dim); font-size: 11px; margin-left: 10px; }
+    tr.empty-row td { color: var(--fg-dim); font-size: 11px; }
+    .sub-label { color: var(--fg-dim); font-size: 10px; display: block; }
+    .gain { color: var(--green); font-size: 10px; margin-left: 4px; }
+
+    .verdict { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+    .v-good { color: #1e1e2e; background: var(--green); }
+    .v-fair { color: #1e1e2e; background: var(--yellow); }
+    .v-over { color: #1e1e2e; background: var(--red); }
+    .v-none { color: var(--fg-dim); border: 1px solid var(--border); font-weight: 600; }
+
+    .q-Common    { color: #8a93a3; }
+    .q-Uncommon  { color: #00C950; }
+    .q-Rare      { color: #2B7FFF; }
+    .q-Epic      { color: #AD46FF; }
+    .q-Legendary { color: #FF6900; }
+    .q-Mythic    { color: #D1D5DC; }
+
+    .placeholder { text-align: center; color: var(--fg-dim); padding: 40px 16px; font-size: 13px; }
+    .note { font-size: 10px; color: var(--fg-dim); margin-top: 10px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚒️ Tool Upgrades</h1>
+  <span class="nav-sep">|</span>
+  <a href="index.html">Market</a>
+  <span class="nav-sep">|</span>
+  <a href="chain_calc.html">Chain Calc</a>
+  <span class="nav-sep">|</span>
+  <a href="equipment_sim.html">Equipment Sim</a>
+  <span class="nav-sep">|</span>
+  <a href="tool_rolling.html">Tool Rolling</a>
+  <span class="nav-sep">|</span>
+  <a href="tool_upgrades.html" style="color:var(--fg)">Tool Upgrades</a>
+  <span class="nav-sep">|</span>
+  <a href="skill_planner.html">📈 Skill Planner</a>
+</header>
+
+<main>
+  <div>
+    <div class="card">
+      <div class="card-title">Player</div>
+      <div class="field">
+        <label class="lbl" for="username">Username</label>
+        <input type="text" id="username" placeholder="e.g. Billard" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label class="check">
+          <input type="checkbox" id="all-tiers" />
+          <span>Include tiers above my skill
+            <span class="sub">By default a tier-T tool is listed once the tool's skill reaches level 10×T (T2 at 20, T5 at 50).</span>
+          </span>
+        </label>
+      </div>
+      <button class="btn" id="btn-load">Find upgrades</button>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Fair value</div>
+      <div class="field">
+        <label class="lbl" for="pricing-mode">Ingredient prices</label>
+        <select id="pricing-mode">
+          <option value="median" selected>Median sell listing</option>
+          <option value="fill">Cost to fill (cheapest 10 units)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="check">
+          <input type="checkbox" id="credit" />
+          <span>Credit leftover tools
+            <span class="sub">Off-quality rolls are sold at their cheapest listing (capped at what rolling one costs) instead of thrown away. Listings are asking prices, not sales, so this can make rolling look free.</span>
+          </span>
+        </label>
+      </div>
+      <div class="field">
+        <label class="check">
+          <input type="checkbox" id="only-good" />
+          <span>Only show good deals</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Regions</div>
+      <div class="region-actions">
+        <button class="region-action-btn" id="btn-regions-all">All</button>
+        <button class="region-action-btn" id="btn-regions-none">None</button>
+      </div>
+      <div class="region-grid" id="region-grid"><span class="hint">Loading…</span></div>
+      <p class="hint" style="margin-top:8px">Filters both the listings shown and the ingredient prices.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">How the verdict works</div>
+      <div class="legend">
+        <div><span class="verdict v-good">Good deal</span> under 85% of fair value</div>
+        <div><span class="verdict v-fair">Fair</span> 85–115% of fair value</div>
+        <div><span class="verdict v-over">Overpriced</span> over 115% of fair value</div>
+      </div>
+      <p class="hint" style="margin-top:10px">Fair value is the expected ingredient cost of rolling that tier and quality yourself:
+        craft at T1, upgrade tier by tier, and stop (selling the tool, if leftovers are credited) whenever a roll makes
+        continuing cost more than it's worth. It uses the same upgrade odds as Tool Rolling.</p>
+      <p class="hint">It's an average. Rolling can cost much more if you're unlucky, while a listing is a fixed price.</p>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-title" id="results-title">Upgrades on the market</div>
+      <div id="results"><div class="placeholder">Enter a username to see market tools that beat what's in their toolbelt.</div></div>
+      <p class="note" id="results-note"></p>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── Upgrade model (same odds and ingredients as tool_rolling.html) ──────────
+
+const QUALITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'];
+
+// Tier-invariant quality transition per upgrade; Mythic absorbing
+const TRANSITION = {
+  Common:    { Common: 0.70,      Uncommon: 0.30 },
+  Uncommon:  { Uncommon: 0.70,    Rare: 0.30 },
+  Rare:      { Rare: 0.85,        Epic: 0.15 },
+  Epic:      { Epic: 0.925,       Legendary: 0.075 },
+  Legendary: { Legendary: 0.9625, Mythic: 0.0375 },
+  Mythic:    { Mythic: 1.0 },
+};
+
+// Ingredients per craft step (4 ingots + 2 rope + 2 plank + 2 leather). Same for every tool type.
+const STEP_INGREDIENTS = {
+  1:  ['1050001',    '1090004',    '1020003',    '1070004'],
+  2:  ['2050001',    '2090004',    '2020003',    '2070004'],
+  3:  ['3050001',    '3090004',    '3020003',    '3070004'],
+  4:  ['4050001',    '4090004',    '4020003',    '4070004'],
+  5:  ['5050001',    '5090004',    '5020003',    '5070004'],
+  6:  ['6050001',    '6090004',    '6020003',    '6070004'],
+  7:  ['1899017490', '625147590',  '1639308227', '806992520'],
+  8:  ['1464752960', '1224328894', '28056473',   '1743778001'],
+  9:  ['445742898',  '471802228',  '1227914325', '478917'],
+  10: ['2069757207', '547017087',  '117329467',  '944952036'],
+};
+const STEP_QTY = [4, 2, 2, 2];
+
+// ── State ────────────────────────────────────────────────────────────────────
+
+let catalog = null;          // data/tool_catalog.json
+let ingredientOrders = {};   // itemId → [{price, qty, regionId}]
+let upgrades = null;         // /api/tool_upgrades response
+let allRegions = [];
+let selectedRegions = null;  // null = all
+let leftoverIndex = {};      // `${type}|${tier}|${rarity}` → cheapest listing price
+
+// ── Prices ───────────────────────────────────────────────────────────────────
+
+function regionOk(o) {
+  return selectedRegions === null || selectedRegions.has(o.regionId);
+}
+
+function ingredientPrice(itemId) {
+  const orders = (ingredientOrders[itemId] || []).filter(regionOk);
+  if (orders.length === 0) return null;
+  const sorted = [...orders].sort((a, b) => a.price - b.price);
+  if (document.getElementById('pricing-mode').value === 'fill') {
+    let pq = 0, q = 0;
+    for (const o of sorted) {
+      const take = Math.min(o.qty, 10 - q);
+      if (take <= 0) break;
+      pq += o.price * take; q += take;
+    }
+    return q > 0 ? pq / q : null;
+  }
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid].price : (sorted[mid - 1].price + sorted[mid].price) / 2;
+}
+
+/** Ingredient cost of one craft at tier t, or null when an ingredient has no listing. */
+function craftCost(t) {
+  let total = 0;
+  for (let i = 0; i < 4; i++) {
+    const p = ingredientPrice(STEP_INGREDIENTS[t][i]);
+    if (p == null) return null;
+    total += STEP_QTY[i] * p;
+  }
+  return total;
+}
+
+function buildLeftoverIndex() {
+  leftoverIndex = {};
+  for (const t of Object.values(catalog.tools)) {
+    if (!t.rollable || !t.price) continue;
+    leftoverIndex[`${t.type}|${t.tier}|${t.rarity}`] = t.price.lowest;
+  }
+}
+
+/** What a leftover tool is credited at: its cheapest listing, but never more than rolling one
+ *  costs (asking prices are often far above that, and nobody would pay more than the roll). */
+function leftoverValue(type, tier, rarity, credit) {
+  if (!credit) return 0;
+  const listed = leftoverIndex[`${type}|${tier}|${rarity}`];
+  if (!listed) return 0;
+  const rollCost = fairValue(type, tier, rarity, false);
+  return rollCost == null ? 0 : Math.min(listed, rollCost);
+}
+
+// ── Fair value ───────────────────────────────────────────────────────────────
+//
+// For a target price λ, the best policy and its expected profit per chain come from a backward
+// pass: at each tier, holding quality q, either sell the tool (leftover value) or pay for the next
+// upgrade and roll. At the target tier, the target quality is worth λ and anything else its
+// leftover value. Fair value is the λ at which a chain breaks even, the expected net cost per
+// target tool. Profit rises with λ, so bisection finds it.
+
+function chainProfit(type, T, Q, lambda, costs, credit) {
+  // W[q] = value of holding a tier-t tool of quality q
+  let W = {};
+  for (const q of QUALITIES) W[q] = q === Q ? lambda : leftoverValue(type, T, q, credit);
+  for (let t = T - 1; t >= 1; t--) {
+    const next = {};
+    for (const q of QUALITIES) {
+      let roll = -costs[t + 1];
+      for (const [q2, p] of Object.entries(TRANSITION[q])) roll += p * W[q2];
+      next[q] = Math.max(leftoverValue(type, t, q, credit), roll);
+    }
+    W = next;
+  }
+  return W.Common - costs[1];  // T1 craft is always Common
+}
+
+const fairCache = new Map();
+
+/** Expected net cost of rolling one (type, tier, rarity) tool, or null if it can't be priced. */
+function fairValue(type, T, Q, credit = document.getElementById('credit').checked) {
+  const key = `${type}|${T}|${Q}|${credit}`;
+  if (fairCache.has(key)) return fairCache.get(key);
+  let result = null;
+  const costs = {};
+  let ok = QUALITIES.indexOf(Q) <= Math.max(1, T - 1) || T >= 6;  // reachable at this tier
+  for (let t = 1; t <= T && ok; t++) {
+    costs[t] = craftCost(t);
+    if (costs[t] == null) ok = false;
+  }
+  if (ok) {
+    if (chainProfit(type, T, Q, 0, costs, credit) >= 0) {
+      result = 0;  // leftovers alone pay for the chain
+    } else {
+      let lo = 0, hi = 1;
+      while (chainProfit(type, T, Q, hi, costs, credit) < 0 && hi < 1e13) hi *= 2;
+      if (hi < 1e13) {
+        for (let i = 0; i < 60; i++) {
+          const mid = (lo + hi) / 2;
+          if (chainProfit(type, T, Q, mid, costs, credit) < 0) lo = mid; else hi = mid;
+        }
+        result = hi;
+      }
+    }
+  }
+  fairCache.set(key, result);
+  return result;
+}
+
+function verdictFor(price, fair) {
+  if (fair == null) return { cls: 'v-none', label: 'No estimate', why: 'Some ingredients for this tier have no listings in the selected regions.' };
+  if (fair <= 0) return { cls: 'v-none', label: 'Roll instead', why: 'At these listing prices, selling the off-quality rolls pays for the whole chain.' };
+  const r = price / fair;
+  if (r < 0.85) return { cls: 'v-good', label: 'Good deal', r };
+  if (r <= 1.15) return { cls: 'v-fair', label: 'Fair', r };
+  return { cls: 'v-over', label: 'Overpriced', r };
+}
+
+// ── Formatting ───────────────────────────────────────────────────────────────
+
+function fmtCost(n) {
+  if (n == null || !isFinite(n)) return '—';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return Math.round(n).toLocaleString();
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+
+function render() {
+  const box = document.getElementById('results');
+  if (!upgrades || !catalog) return;
+  fairCache.clear();
+  const onlyGood = document.getElementById('only-good').checked;
+
+  let rows = '';
+  let shown = 0, good = 0;
+  for (const type of upgrades.types) {
+    const cur = type.current;
+    const curText = cur
+      ? `<span class="q-${cur.rarity}">${esc(cur.rarity)}</span> ${esc(cur.name)} · power ${cur.power}`
+      : 'none in toolbelt';
+    rows += `<tr class="type-row"><td colspan="7"><span class="tname">${esc(type.name)}</span>
+      <span class="tmeta">You have: ${curText}</span>
+      <span class="tmeta">${esc(type.skill_name)} ${type.skill_level} · up to T${type.max_tier}</span></td></tr>`;
+
+    let typeRows = 0;
+    for (const c of type.candidates) {
+      const orders = c.orders.filter(regionOk);
+      if (orders.length === 0) continue;
+      const best = orders[0];
+      const fair = fairValue(type.type, c.tier, c.rarity);
+      const v = verdictFor(best.price, fair);
+      if (v.cls === 'v-good') good++;
+      if (onlyGood && v.cls !== 'v-good') continue;
+      typeRows++; shown++;
+      const gain = c.power - (cur ? cur.power : 0);
+      const pct = v.r != null ? `<span class="sub-label">${Math.round(v.r * 100)}% of fair</span>` : '';
+      rows += `<tr>
+        <td><span class="q-${c.rarity}">${esc(c.rarity)}</span> ${esc(c.name)}<span class="sub-label">T${c.tier}</span></td>
+        <td class="num">${c.power}<span class="gain">+${gain}</span></td>
+        <td class="num">${fmtCost(best.price)}${orders.length > 1 ? `<span class="sub-label">${orders.length} listings</span>` : ''}</td>
+        <td class="num">${fair > 0 ? fmtCost(fair) : '—'}</td>
+        <td><span class="verdict ${v.cls}" title="${esc(v.why || '')}">${v.label}</span>${pct}</td>
+        <td>${esc(best.regionName)}<span class="sub-label">${esc(best.claimName)}</span></td>
+        <td>${esc(best.seller)}</td>
+      </tr>`;
+    }
+    if (typeRows === 0) {
+      rows += `<tr class="empty-row"><td colspan="7">${onlyGood ? 'No good deals' : 'No better listings'} in the selected regions.</td></tr>`;
+    }
+  }
+
+  box.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr>
+      <th>Tool</th><th class="num">Power</th><th class="num">Cheapest</th><th class="num">Fair value</th>
+      <th>Verdict</th><th>Region · claim</th><th>Seller</th>
+    </tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+
+  document.getElementById('results-title').textContent =
+    `Upgrades on the market for ${upgrades.player.username} — ${shown} listing${shown === 1 ? '' : 's'}, ${good} good deal${good === 1 ? '' : 's'}`;
+  const built = catalog.__meta__?.built_at ? new Date(catalog.__meta__.built_at).toLocaleString() : 'unknown';
+  document.getElementById('results-note').textContent =
+    `Listings fetched ${new Date(upgrades.fetched_at).toLocaleString()}. Leftover tool prices from ${built}. ` +
+    `Only tools in the toolbelt count as yours. Prices are in hex coins.` +
+    (upgrades.truncated ? ' Too many listings matched, so the highest tiers were left out.' : '');
+}
+
+// ── Loading ──────────────────────────────────────────────────────────────────
+
+function setStatus(msg, isErr = false) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status' + (isErr ? ' err' : '');
+}
+
+async function loadStatic() {
+  const [cat, batch, regions] = await Promise.all([
+    fetch('data/tool_catalog.json').then(r => r.json()),
+    fetch('/api/market_batch').then(r => r.ok ? r.json() : { items: {} }).catch(() => ({ items: {} })),
+    fetch('/api/regions').then(r => r.json()).catch(() => ({ regions: [] })),
+  ]);
+  catalog = cat;
+  ingredientOrders = batch.items || {};
+  allRegions = regions.regions || [];
+  buildLeftoverIndex();
+  renderRegions();
+}
+
+const staticReady = loadStatic();
+
+async function loadPlayer() {
+  const username = document.getElementById('username').value.trim();
+  if (!username) { setStatus('Enter a username.', true); return; }
+  const btn = document.getElementById('btn-load');
+  btn.disabled = true;
+  setStatus('Checking toolbelt and market listings…');
+  try {
+    const params = new URLSearchParams({ username });
+    if (document.getElementById('all-tiers').checked) params.set('all_tiers', '1');
+    const [res] = await Promise.all([fetch('/api/tool_upgrades?' + params), staticReady]);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    upgrades = data;
+    try { localStorage.setItem('toolUpgradesUser', username); } catch (e) {}
+    setStatus('');
+    render();
+  } catch (e) {
+    setStatus(`Couldn't load: ${e.message}`, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Regions ──────────────────────────────────────────────────────────────────
+
+function renderRegions() {
+  const grid = document.getElementById('region-grid');
+  grid.innerHTML = '';
+  if (allRegions.length === 0) { grid.innerHTML = '<span class="hint">No regions found.</span>'; return; }
+  const asc = [...allRegions].sort((a, b) => a.id - b.id);
+  const rows = [];
+  for (let i = 0; i < asc.length; i += 3) rows.push(asc.slice(i, i + 3));
+  rows.reverse();
+  for (const region of rows.flat()) {
+    const b = document.createElement('button');
+    b.className = 'region-btn active';
+    b.dataset.regionId = region.id;
+    b.title = region.name || `Region ${region.id}`;
+    b.textContent = region.id;
+    b.addEventListener('click', () => { b.classList.toggle('active'); syncRegions(); });
+    grid.appendChild(b);
+  }
+}
+
+function syncRegions() {
+  const btns = [...document.querySelectorAll('.region-btn')];
+  const active = btns.filter(b => b.classList.contains('active')).map(b => parseInt(b.dataset.regionId));
+  selectedRegions = active.length === btns.length ? null : new Set(active);
+  render();
+}
+
+document.getElementById('btn-regions-all').addEventListener('click', () => {
+  document.querySelectorAll('.region-btn').forEach(b => b.classList.add('active')); syncRegions();
+});
+document.getElementById('btn-regions-none').addEventListener('click', () => {
+  document.querySelectorAll('.region-btn').forEach(b => b.classList.remove('active')); syncRegions();
+});
+
+document.getElementById('btn-load').addEventListener('click', loadPlayer);
+document.getElementById('username').addEventListener('keydown', e => { if (e.key === 'Enter') loadPlayer(); });
+document.getElementById('all-tiers').addEventListener('change', () => { if (upgrades) loadPlayer(); });
+for (const id of ['pricing-mode', 'credit', 'only-good']) {
+  document.getElementById(id).addEventListener('change', render);
+}
+
+try {
+  const saved = localStorage.getItem('toolUpgradesUser');
+  if (saved) document.getElementById('username').value = saved;
+} catch (e) {}
+</script>
+</body>
+</html>

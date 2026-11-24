@@ -9,6 +9,7 @@
     { "src": "api/chain_calc.py",    "use": "@vercel/python" },
     { "src": "api/market_batch.py",   "use": "@vercel/python" },
     { "src": "api/skill_planner.py", "use": "@vercel/python" },
+    { "src": "api/tool_upgrades.py", "use": "@vercel/python" },
     { "src": "data/**",              "use": "@vercel/static" },
     { "src": "index.html",           "use": "@vercel/static" },
     { "src": "app.js",              "use": "@vercel/static" },
@@ -17,7 +18,8 @@
     { "src": "chain_calc.html",     "use": "@vercel/static" },
     { "src": "tool_rolling.html",          "use": "@vercel/static" },
     { "src": "tool_rolling_rerolling.html", "use": "@vercel/static" },
-    { "src": "skill_planner.html",         "use": "@vercel/static" }
+    { "src": "skill_planner.html",         "use": "@vercel/static" },
+    { "src": "tool_upgrades.html",         "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/api/search",       "dest": "/api/search.py"       },
@@ -29,6 +31,7 @@
     { "src": "/api/chain_calc",    "dest": "/api/chain_calc.py"    },
     { "src": "/api/market_batch",   "dest": "/api/market_batch.py"   },
     { "src": "/api/skill_planner", "dest": "/api/skill_planner.py" },
+    { "src": "/api/tool_upgrades", "dest": "/api/tool_upgrades.py" },
     { "src": "/(.*)",              "dest": "/$1"                    }
   ]
 }
