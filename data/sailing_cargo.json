@@ -1,6 +1,6 @@
 {
  "__meta__": {
-  "built": "2026-11-24T16:56:21Z",
+  "built": "2026-11-25T01:54:05Z",
   "units": "raw world units; game E/N = raw / 3; speeds in raw units/s"
  },
  "node_types": [
@@ -183,7 +183,7 @@
     {
      "min_level": 1,
      "nodes": 957,
-     "avg_hop": 87.7,
+     "avg_hop": 81.3,
      "share": {
       "wreckage": 1.0
      }
@@ -191,7 +191,7 @@
     {
      "min_level": 20,
      "nodes": 1310,
-     "avg_hop": 77.2,
+     "avg_hop": 73.8,
      "share": {
       "wreckage": 0.7305,
       "shipment": 0.2695
@@ -200,7 +200,7 @@
     {
      "min_level": 50,
      "nodes": 1497,
-     "avg_hop": 73.1,
+     "avg_hop": 72.2,
      "share": {
       "wreckage": 0.6393,
       "shipment": 0.2358,
@@ -212,36 +212,36 @@
   "8": {
    "name": "Solmere",
    "counts": {
-    "wreckage": 910,
-    "shipment": 342,
+    "wreckage": 920,
+    "shipment": 336,
     "treasure": 129
    },
    "brackets": [
     {
      "min_level": 1,
-     "nodes": 910,
-     "avg_hop": 88.5,
+     "nodes": 920,
+     "avg_hop": 88.8,
      "share": {
       "wreckage": 1.0
      }
     },
     {
      "min_level": 20,
-     "nodes": 1252,
-     "avg_hop": 79.3,
+     "nodes": 1256,
+     "avg_hop": 73.1,
      "share": {
-      "wreckage": 0.7268,
-      "shipment": 0.2732
+      "wreckage": 0.7325,
+      "shipment": 0.2675
      }
     },
     {
      "min_level": 50,
-     "nodes": 1381,
-     "avg_hop": 68.3,
+     "nodes": 1385,
+     "avg_hop": 74.6,
      "share": {
-      "wreckage": 0.6589,
-      "shipment": 0.2476,
-      "treasure": 0.0934
+      "wreckage": 0.6643,
+      "shipment": 0.2426,
+      "treasure": 0.0931
      }
     }
    ]
@@ -257,7 +257,7 @@
     {
      "min_level": 1,
      "nodes": 993,
-     "avg_hop": 69.6,
+     "avg_hop": 77.7,
      "share": {
       "wreckage": 1.0
      }
@@ -265,7 +265,7 @@
     {
      "min_level": 20,
      "nodes": 1381,
-     "avg_hop": 70.6,
+     "avg_hop": 78.8,
      "share": {
       "wreckage": 0.719,
       "shipment": 0.281
@@ -274,7 +274,7 @@
     {
      "min_level": 50,
      "nodes": 1559,
-     "avg_hop": 67.0,
+     "avg_hop": 72.0,
      "share": {
       "wreckage": 0.6369,
       "shipment": 0.2489,
@@ -286,36 +286,36 @@
   "12": {
    "name": "Elyndor",
    "counts": {
-    "wreckage": 798,
-    "shipment": 298,
+    "wreckage": 821,
+    "shipment": 317,
     "treasure": 133
    },
    "brackets": [
     {
      "min_level": 1,
-     "nodes": 798,
-     "avg_hop": 99.7,
+     "nodes": 821,
+     "avg_hop": 95.8,
      "share": {
       "wreckage": 1.0
      }
     },
     {
      "min_level": 20,
-     "nodes": 1096,
-     "avg_hop": 88.4,
+     "nodes": 1138,
+     "avg_hop": 70.3,
      "share": {
-      "wreckage": 0.7281,
-      "shipment": 0.2719
+      "wreckage": 0.7214,
+      "shipment": 0.2786
      }
     },
     {
      "min_level": 50,
-     "nodes": 1229,
-     "avg_hop": 80.2,
+     "nodes": 1271,
+     "avg_hop": 71.7,
      "share": {
-      "wreckage": 0.6493,
-      "shipment": 0.2425,
-      "treasure": 0.1082
+      "wreckage": 0.6459,
+      "shipment": 0.2494,
+      "treasure": 0.1046
      }
     }
    ]
@@ -323,36 +323,36 @@
   "13": {
    "name": "Hexalis",
    "counts": {
-    "wreckage": 1452,
-    "shipment": 504,
+    "wreckage": 1454,
+    "shipment": 512,
     "treasure": 203
    },
    "brackets": [
     {
      "min_level": 1,
-     "nodes": 1452,
-     "avg_hop": 96.6,
+     "nodes": 1454,
+     "avg_hop": 84.0,
      "share": {
       "wreckage": 1.0
      }
     },
     {
      "min_level": 20,
-     "nodes": 1956,
-     "avg_hop": 75.2,
+     "nodes": 1966,
+     "avg_hop": 79.2,
      "share": {
-      "wreckage": 0.7423,
-      "shipment": 0.2577
+      "wreckage": 0.7396,
+      "shipment": 0.2604
      }
     },
     {
      "min_level": 50,
-     "nodes": 2159,
-     "avg_hop": 71.8,
+     "nodes": 2169,
+     "avg_hop": 70.6,
      "share": {
-      "wreckage": 0.6725,
-      "shipment": 0.2334,
-      "treasure": 0.094
+      "wreckage": 0.6704,
+      "shipment": 0.2361,
+      "treasure": 0.0936
      }
     }
    ]
@@ -360,36 +360,36 @@
   "14": {
    "name": "Lumethis",
    "counts": {
-    "wreckage": 1021,
-    "shipment": 365,
-    "treasure": 193
+    "wreckage": 1012,
+    "shipment": 358,
+    "treasure": 191
    },
    "brackets": [
     {
      "min_level": 1,
-     "nodes": 1021,
-     "avg_hop": 88.4,
+     "nodes": 1012,
+     "avg_hop": 85.0,
      "share": {
       "wreckage": 1.0
      }
     },
     {
      "min_level": 20,
-     "nodes": 1386,
-     "avg_hop": 67.6,
+     "nodes": 1370,
+     "avg_hop": 68.0,
      "share": {
-      "wreckage": 0.7367,
-      "shipment": 0.2633
+      "wreckage": 0.7387,
+      "shipment": 0.2613
      }
     },
     {
      "min_level": 50,
-     "nodes": 1579,
-     "avg_hop": 56.2,
+     "nodes": 1561,
+     "avg_hop": 68.6,
      "share": {
-      "wreckage": 0.6466,
-      "shipment": 0.2312,
-      "treasure": 0.1222
+      "wreckage": 0.6483,
+      "shipment": 0.2293,
+      "treasure": 0.1224
      }
     }
    ]
@@ -397,36 +397,36 @@
   "17": {
    "name": "Draxen",
    "counts": {
-    "wreckage": 1022,
-    "shipment": 372,
+    "wreckage": 1027,
+    "shipment": 376,
     "treasure": 152
    },
    "brackets": [
     {
      "min_level": 1,
-     "nodes": 1022,
-     "avg_hop": 77.3,
+     "nodes": 1027,
+     "avg_hop": 83.8,
      "share": {
       "wreckage": 1.0
      }
     },
     {
      "min_level": 20,
-     "nodes": 1394,
-     "avg_hop": 70.7,
+     "nodes": 1403,
+     "avg_hop": 82.0,
      "share": {
-      "wreckage": 0.7331,
-      "shipment": 0.2669
+      "wreckage": 0.732,
+      "shipment": 0.268
      }
     },
     {
      "min_level": 50,
-     "nodes": 1546,
-     "avg_hop": 64.7,
+     "nodes": 1555,
+     "avg_hop": 64.0,
      "share": {
-      "wreckage": 0.6611,
-      "shipment": 0.2406,
-      "treasure": 0.0983
+      "wreckage": 0.6605,
+      "shipment": 0.2418,
+      "treasure": 0.0977
      }
     }
    ]
@@ -434,36 +434,36 @@
   "18": {
    "name": "Oryxen",
    "counts": {
-    "wreckage": 884,
+    "wreckage": 887,
     "shipment": 292,
     "treasure": 139
    },
    "brackets": [
     {
      "min_level": 1,
-     "nodes": 884,
-     "avg_hop": 83.3,
+     "nodes": 887,
+     "avg_hop": 81.0,
      "share": {
       "wreckage": 1.0
      }
     },
     {
      "min_level": 20,
-     "nodes": 1176,
-     "avg_hop": 65.7,
+     "nodes": 1179,
+     "avg_hop": 65.3,
      "share": {
-      "wreckage": 0.7517,
-      "shipment": 0.2483
+      "wreckage": 0.7523,
+      "shipment": 0.2477
      }
     },
     {
      "min_level": 50,
-     "nodes": 1315,
-     "avg_hop": 72.0,
+     "nodes": 1318,
+     "avg_hop": 75.3,
      "share": {
-      "wreckage": 0.6722,
-      "shipment": 0.2221,
-      "treasure": 0.1057
+      "wreckage": 0.673,
+      "shipment": 0.2215,
+      "treasure": 0.1055
      }
     }
    ]
@@ -472,35 +472,35 @@
    "name": "Zephra",
    "counts": {
     "wreckage": 897,
-    "shipment": 326,
+    "shipment": 317,
     "treasure": 139
    },
    "brackets": [
     {
      "min_level": 1,
      "nodes": 897,
-     "avg_hop": 73.2,
+     "avg_hop": 77.9,
      "share": {
       "wreckage": 1.0
      }
     },
     {
      "min_level": 20,
-     "nodes": 1223,
-     "avg_hop": 62.3,
+     "nodes": 1214,
+     "avg_hop": 73.7,
      "share": {
-      "wreckage": 0.7334,
-      "shipment": 0.2666
+      "wreckage": 0.7389,
+      "shipment": 0.2611
      }
     },
     {
      "min_level": 50,
-     "nodes": 1362,
-     "avg_hop": 60.7,
+     "nodes": 1353,
+     "avg_hop": 74.6,
      "share": {
-      "wreckage": 0.6586,
-      "shipment": 0.2394,
-      "treasure": 0.1021
+      "wreckage": 0.663,
+      "shipment": 0.2343,
+      "treasure": 0.1027
      }
     }
    ]
@@ -511,40 +511,40 @@
    "name": "Salt Deposit",
    "regions": {
     "7": {
-     "nodes": 2134,
-     "avg_hop": 31.7
+     "nodes": 2141,
+     "avg_hop": 31.5
     },
     "8": {
      "nodes": 1618,
-     "avg_hop": 47.6
+     "avg_hop": 49.9
     },
     "9": {
-     "nodes": 1946,
-     "avg_hop": 39.3
+     "nodes": 1934,
+     "avg_hop": 40.1
     },
     "12": {
-     "nodes": 2823,
-     "avg_hop": 35.5
+     "nodes": 2818,
+     "avg_hop": 38.3
     },
     "13": {
-     "nodes": 3643,
-     "avg_hop": 20.7
+     "nodes": 3632,
+     "avg_hop": 20.4
     },
     "14": {
-     "nodes": 2454,
-     "avg_hop": 34.9
+     "nodes": 2453,
+     "avg_hop": 35.8
     },
     "17": {
-     "nodes": 3998,
-     "avg_hop": 26.0
+     "nodes": 4000,
+     "avg_hop": 29.7
     },
     "18": {
-     "nodes": 3285,
-     "avg_hop": 29.4
+     "nodes": 3286,
+     "avg_hop": 31.1
     },
     "19": {
-     "nodes": 2367,
-     "avg_hop": 35.9
+     "nodes": 2371,
+     "avg_hop": 36.1
     }
    }
   }
